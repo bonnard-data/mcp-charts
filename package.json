@@ -4,11 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@11.5.2",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "pnpm -F @bonnard/mcp-charts-widget build && pnpm -F @bonnard/mcp-charts build",
     "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "test": "pnpm -r test",
+    "check:exports": "pnpm -F @bonnard/mcp-charts check:exports",
     "dev": "pnpm -r --parallel dev",
     "changeset": "changeset",
     "version-packages": "changeset version",
@@ -16,6 +24,11 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.9",
-    "typescript": "^5.6.0"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.4",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.61.1"
   }
 }

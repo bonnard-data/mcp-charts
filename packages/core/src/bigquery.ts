@@ -45,10 +45,7 @@ export interface BigQueryRunSqlOptions {
  * Build the `runSql` callback for `addCharts` from a BigQuery client.
  * Runs the query with the configured guards and returns schema-typed ChartData.
  */
-export function bigQueryRunSql(
-  bq: BigQuery,
-  opts: BigQueryRunSqlOptions = {},
-): (sql: string) => Promise<ChartData> {
+export function bigQueryRunSql(bq: BigQuery, opts: BigQueryRunSqlOptions = {}): (sql: string) => Promise<ChartData> {
   const defaultDataset =
     typeof opts.defaultDataset === "string" ? { datasetId: opts.defaultDataset } : opts.defaultDataset;
   return async (sql: string): Promise<ChartData> => {

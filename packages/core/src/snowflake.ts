@@ -25,7 +25,10 @@ export interface SnowflakeRunSqlOptions {
 }
 
 /** Build the `runSql` callback for `addCharts` from a connected snowflake-sdk Connection. */
-export function snowflakeRunSql(connection: Connection, opts: SnowflakeRunSqlOptions = {}): (sql: string) => Promise<ChartData> {
+export function snowflakeRunSql(
+  connection: Connection,
+  opts: SnowflakeRunSqlOptions = {},
+): (sql: string) => Promise<ChartData> {
   const readOnly = opts.readOnly !== false;
   return (sql: string): Promise<ChartData> =>
     new Promise<ChartData>((resolve, reject) => {
@@ -33,7 +36,7 @@ export function snowflakeRunSql(connection: Connection, opts: SnowflakeRunSqlOpt
         try {
           assertReadOnlySql(sql);
         } catch (err) {
-          reject(err);
+          reject(err instanceof Error ? err : new Error(String(err)));
           return;
         }
       }

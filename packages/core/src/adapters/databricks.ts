@@ -5,12 +5,29 @@ import { buildChartData, type SourceColumn } from "./sql.js";
 
 // Thrift TTypeId codes (@databricks/sql TCLIService_types). These are wire-protocol constants.
 const TTypeId = {
-  BOOLEAN: 0, TINYINT: 1, SMALLINT: 2, INT: 3, BIGINT: 4, FLOAT: 5, DOUBLE: 6,
-  STRING: 7, TIMESTAMP: 8, DECIMAL: 15, DATE: 17, VARCHAR: 18, CHAR: 19,
+  BOOLEAN: 0,
+  TINYINT: 1,
+  SMALLINT: 2,
+  INT: 3,
+  BIGINT: 4,
+  FLOAT: 5,
+  DOUBLE: 6,
+  STRING: 7,
+  TIMESTAMP: 8,
+  DECIMAL: 15,
+  DATE: 17,
+  VARCHAR: 18,
+  CHAR: 19,
 } as const;
 
 const NUMERIC = new Set<number>([
-  TTypeId.TINYINT, TTypeId.SMALLINT, TTypeId.INT, TTypeId.BIGINT, TTypeId.FLOAT, TTypeId.DOUBLE, TTypeId.DECIMAL,
+  TTypeId.TINYINT,
+  TTypeId.SMALLINT,
+  TTypeId.INT,
+  TTypeId.BIGINT,
+  TTypeId.FLOAT,
+  TTypeId.DOUBLE,
+  TTypeId.DECIMAL,
 ]);
 const TEMPORAL = new Set<number>([TTypeId.TIMESTAMP, TTypeId.DATE]);
 

@@ -7,7 +7,7 @@ import { fixtures, type Fixture } from "./fixtures.js";
 
 const f = (name: string): Fixture => fixtures.find((x) => x.name === name)!;
 // ECOption is a union of nominally-distinct types; read fields loosely in assertions.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const opt = (name: string): any => specToOption(resolveSpec(f(name).data, f(name).opts));
 
 describe("specToOption — series mapping", () => {
@@ -155,7 +155,15 @@ describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {
   const evil = "<img src=x onerror=alert(1)>";
 
   it("pie tooltip escapes the category name", () => {
-    const spec = resolveSpec({ rows: [{ region: evil, revenue: 10 }, { region: "US", revenue: 20 }] }, { chartType: "pie" });
+    const spec = resolveSpec(
+      {
+        rows: [
+          { region: evil, revenue: 10 },
+          { region: "US", revenue: 20 },
+        ],
+      },
+      { chartType: "pie" },
+    );
     const o: any = specToOption(spec);
     const html = o.tooltip.formatter({ marker: "", name: evil, value: 10, percent: 33 });
     expect(html).toContain("&lt;img");
@@ -163,7 +171,15 @@ describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {
   });
 
   it("funnel tooltip escapes the stage name", () => {
-    const spec = resolveSpec({ rows: [{ stage: evil, users: 100 }, { stage: "b", users: 50 }] }, { chartType: "funnel" });
+    const spec = resolveSpec(
+      {
+        rows: [
+          { stage: evil, users: 100 },
+          { stage: "b", users: 50 },
+        ],
+      },
+      { chartType: "funnel" },
+    );
     const o: any = specToOption(spec);
     const html = o.tooltip.formatter({ marker: "", name: evil, value: 100, percent: 50 });
     expect(html).toContain("&lt;img");
@@ -171,7 +187,15 @@ describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {
   });
 
   it("waterfall tooltip escapes the step label from row data", () => {
-    const spec = resolveSpec({ rows: [{ step: evil, amount: 100 }, { step: "End", amount: 50 }] }, { chartType: "waterfall" });
+    const spec = resolveSpec(
+      {
+        rows: [
+          { step: evil, amount: 100 },
+          { step: "End", amount: 50 },
+        ],
+      },
+      { chartType: "waterfall" },
+    );
     const o: any = specToOption(spec);
     const html = o.tooltip.formatter({ dataIndex: 0 });
     expect(html).toContain("&lt;img");

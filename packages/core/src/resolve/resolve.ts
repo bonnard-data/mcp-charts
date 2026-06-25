@@ -37,7 +37,13 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // x-axis), the lowest-cardinality numeric acts as the x dimension (e.g. {year, revenue} ->
   // a bar over year) instead of degrading to a two-measure table. Tie on cardinality -> the
   // earliest column (SQL convention puts the GROUP BY key first). Not for scatter (both stay measures).
-  if (!isScatter && !encode.x && data.rows.length > 1 && fields.length >= 2 && fields.every((f) => f.role === "measure")) {
+  if (
+    !isScatter &&
+    !encode.x &&
+    data.rows.length > 1 &&
+    fields.length >= 2 &&
+    fields.every((f) => f.role === "measure")
+  ) {
     const distinct = (k: string) => new Set(data.rows.map((r) => r[k])).size;
     let best = fields[0]!;
     for (const f of fields) if (distinct(f.name) < distinct(best.name)) best = f;
@@ -67,9 +73,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // --- x-axis: encode wins, then first time field, then first dimension ---
   const timeField = fields.find((f) => f.role === "time");
   const dimField = fields.find((f) => f.role === "dimension");
-  const xField: FieldMeta | undefined = encode.x
-    ? byName.get(encode.x)
-    : (timeField ?? dimField);
+  const xField: FieldMeta | undefined = encode.x ? byName.get(encode.x) : (timeField ?? dimField);
   const x = xField?.name ?? "";
 
   // --- measures (y) --- (never plot the x column as a measure)
@@ -83,8 +87,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
       : fields.filter((f) => f.role === "measure" && f.name !== x).map((f) => f.name)
   ).filter((n) => !y2Names.includes(n));
 
-  let chartType =
-    !opts.chartType || opts.chartType === "auto" ? detectChartType(fields) : opts.chartType;
+  let chartType = !opts.chartType || opts.chartType === "auto" ? detectChartType(fields) : opts.chartType;
 
   // No x-axis to plot against -> fall back to a table.
   if (!x && chartType !== "table") chartType = "table";
@@ -127,10 +130,9 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   }
 
   // --- series: pivot a (time + one categorical dimension + one measure) into multi-series ---
-  const pivotDim = encode.series
-    ?? (timeField && dimField && dimField.name !== x && dimField.kind === "string"
-      ? dimField.name
-      : undefined);
+  const pivotDim =
+    encode.series ??
+    (timeField && dimField && dimField.name !== x && dimField.kind === "string" ? dimField.name : undefined);
 
   const notes: string[] = [];
   let series: SeriesSpec[];
@@ -140,7 +142,9 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     rows = result.data;
     series = result.seriesKeys.map((key) => ({ key, label: key }));
     if (result.collapsed > 0)
-      notes.push(`Summed ${result.collapsed} row(s) that shared the same ${x} + ${pivotDim} — the data looked unaggregated.`);
+      notes.push(
+        `Summed ${result.collapsed} row(s) that shared the same ${x} + ${pivotDim} — the data looked unaggregated.`,
+      );
     // Too many series = an indistinguishable color soup. Keep the largest by total, fold the
     // rest into one "Other" series (stacking is part-to-whole, so the total must be preserved).
     if (series.length > MAX_SERIES) {
@@ -179,7 +183,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     // Sum duplicate x rows: unaggregated SQL (no GROUP BY) yields repeated categories that
     // would otherwise render as overlapping/duplicate bars instead of one summed value.
     if (x && series.length > 0) {
-      const agg = aggregateByX(rows, x, series.map((s) => s.key));
+      const agg = aggregateByX(
+        rows,
+        x,
+        series.map((s) => s.key),
+      );
       rows = agg.rows;
       if (agg.collapsed > 0)
         notes.push(`Summed ${agg.collapsed} row(s) that shared the same ${x} — the data looked unaggregated.`);
@@ -192,7 +200,12 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
 
   // Fill time gaps so lines/areas render breaks correctly.
   if (xField?.role === "time" && xField.granularity && x) {
-    rows = fillMissingTimeIntervals(rows, x, series.map((s) => s.key), xField.granularity);
+    rows = fillMissingTimeIntervals(
+      rows,
+      x,
+      series.map((s) => s.key),
+      xField.granularity,
+    );
   }
 
   // Too many categorical bars are unreadable. Keep the top N by value (a bar chart is a ranking,
@@ -270,7 +283,12 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // numeric axis is linear — flipping them is wrong (and was the bug that sent month series sideways).
   const hasComboLine = series.some((s) => s.type === "line");
   let horizontal = opts.horizontal;
-  if (horizontal == null && chartType === "bar" && xField?.kind === "string" && rows.length > HORIZONTAL_CATEGORY_THRESHOLD) {
+  if (
+    horizontal == null &&
+    chartType === "bar" &&
+    xField?.kind === "string" &&
+    rows.length > HORIZONTAL_CATEGORY_THRESHOLD
+  ) {
     horizontal = true;
   }
   // A same-axis combo line is only meaningful over vertical bars (a connected line on a horizontal
@@ -285,7 +303,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     const primary = series.find((s) => s.axis !== "right") ?? series[0];
     if (opts.reference.average && primary) {
       const vals = rows.map((r) => Number(r[primary.key])).filter((v) => Number.isFinite(v));
-      if (vals.length) reference.push({ value: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100, label: "Avg" });
+      if (vals.length)
+        reference.push({
+          value: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100,
+          label: "Avg",
+        });
     }
     if (opts.reference.target != null) reference.push({ value: opts.reference.target, label: "Target" });
   }
@@ -322,7 +344,9 @@ function resolveScatter(
   const x = encode.x ?? measures[0]?.name;
   const y = yEnc ?? measures.find((m) => m.name !== x)?.name;
   if (!x || !y) {
-    throw new Error("A scatter chart needs two numeric columns. Select at least two measures (x and y), e.g. orders and revenue.");
+    throw new Error(
+      "A scatter chart needs two numeric columns. Select at least two measures (x and y), e.g. orders and revenue.",
+    );
   }
   const xField = byName.get(x);
   const yField = byName.get(y);
@@ -335,7 +359,12 @@ function resolveScatter(
 
   const colMeta = (k: string) => {
     const f = byName.get(k);
-    return { key: k, label: f?.label ?? k, ...(f?.format && { format: f.format }), ...(f?.currency && { currency: f.currency }) };
+    return {
+      key: k,
+      label: f?.label ?? k,
+      ...(f?.format && { format: f.format }),
+      ...(f?.currency && { currency: f.currency }),
+    };
   };
   const columns = [x, y, ...(size ? [size] : []), ...(pointLabel ? [pointLabel] : [])].map(colMeta);
 
@@ -346,8 +375,17 @@ function resolveScatter(
     series: [{ key: y, label: yField?.label ?? y }],
     ...(size && { size }),
     ...(pointLabel && { pointLabel }),
-    xAxis: { ...(xField?.label && { label: xField.label }), ...(xField?.format && { format: xField.format }), ...(xField?.currency && { currency: xField.currency }), numeric: true },
-    yAxis: { ...(yField?.label && { label: yField.label }), ...(yField?.format && { format: yField.format }), ...(yField?.currency && { currency: yField.currency }) },
+    xAxis: {
+      ...(xField?.label && { label: xField.label }),
+      ...(xField?.format && { format: xField.format }),
+      ...(xField?.currency && { currency: xField.currency }),
+      numeric: true,
+    },
+    yAxis: {
+      ...(yField?.label && { label: yField.label }),
+      ...(yField?.format && { format: yField.format }),
+      ...(yField?.currency && { currency: yField.currency }),
+    },
     legend: false,
     ...(opts.title && { title: opts.title }),
     columns,
@@ -374,7 +412,12 @@ function resolveFunnel(
   const data = positive.length > 0 ? positive : rows;
   const colMeta = (k: string) => {
     const f = byName.get(k);
-    return { key: k, label: f?.label ?? k, ...(f?.format && { format: f.format }), ...(f?.currency && { currency: f.currency }) };
+    return {
+      key: k,
+      label: f?.label ?? k,
+      ...(f?.format && { format: f.format }),
+      ...(f?.currency && { currency: f.currency }),
+    };
   };
   return {
     chartType: "funnel",
@@ -399,9 +442,13 @@ function resolveWaterfall(
 ): ChartSpec {
   const byName = new Map(fields.map((f) => [f.name, f]));
   const dim = encode.x ?? fields.find((f) => f.role === "dimension")?.name;
-  const value = (Array.isArray(encode.y) ? encode.y[0] : encode.y) ?? fields.find((f) => f.role === "measure" && f.name !== dim)?.name;
+  const value =
+    (Array.isArray(encode.y) ? encode.y[0] : encode.y) ??
+    fields.find((f) => f.role === "measure" && f.name !== dim)?.name;
   if (!dim || !value) {
-    throw new Error("A waterfall needs a step label and a numeric value. The value should be the SIGNED change at each step (e.g. -240000 for a loss); mark the start/end rows as totals.");
+    throw new Error(
+      "A waterfall needs a step label and a numeric value. The value should be the SIGNED change at each step (e.g. -240000 for a loss); mark the start/end rows as totals.",
+    );
   }
   if (rows.length < 2) {
     throw new Error("A waterfall needs at least a start total and one change step.");
@@ -409,7 +456,11 @@ function resolveWaterfall(
   // Totals: a marker column (e.g. kind/type/direction = total/opening/closing) if one exists,
   // otherwise the conventional first and last rows.
   const markerCol = fields.find(
-    (f) => f.name !== dim && f.name !== value && f.role === "dimension" && rows.some((r) => TOTAL_RE.test(String(r[f.name]))),
+    (f) =>
+      f.name !== dim &&
+      f.name !== value &&
+      f.role === "dimension" &&
+      rows.some((r) => TOTAL_RE.test(String(r[f.name]))),
   );
   const totals = markerCol
     ? rows.filter((r) => TOTAL_RE.test(String(r[markerCol.name]))).map((r) => String(r[dim]))
@@ -418,7 +469,12 @@ function resolveWaterfall(
   const valField = byName.get(value);
   const colMeta = (k: string) => {
     const f = byName.get(k);
-    return { key: k, label: f?.label ?? k, ...(f?.format && { format: f.format }), ...(f?.currency && { currency: f.currency }) };
+    return {
+      key: k,
+      label: f?.label ?? k,
+      ...(f?.format && { format: f.format }),
+      ...(f?.currency && { currency: f.currency }),
+    };
   };
   return {
     chartType: "waterfall",
@@ -426,7 +482,11 @@ function resolveWaterfall(
     x: dim,
     series: [{ key: value, label: valField?.label ?? value }],
     ...(totals.length > 0 && { totals: [...new Set(totals)] }),
-    yAxis: { ...(valField?.label && { label: valField.label }), ...(valField?.format && { format: valField.format }), ...(valField?.currency && { currency: valField.currency }) },
+    yAxis: {
+      ...(valField?.label && { label: valField.label }),
+      ...(valField?.format && { format: valField.format }),
+      ...(valField?.currency && { currency: valField.currency }),
+    },
     legend: false,
     ...(opts.title && { title: opts.title }),
     columns: [dim, value].map(colMeta),

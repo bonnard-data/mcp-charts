@@ -62,7 +62,12 @@ export function defaultNormalizeCell(value: unknown, kind: FieldKind): unknown {
  * Turn a SQL result (rows + column types) into typed ChartData. Builds a complete FieldMeta per
  * column from the engine kind + name-based format/granularity hints, then normalizes every cell.
  */
-export function buildChartData({ rows, columns, mapKind, normalizeCell = defaultNormalizeCell }: BuildChartDataOptions): ChartData {
+export function buildChartData({
+  rows,
+  columns,
+  mapKind,
+  normalizeCell = defaultNormalizeCell,
+}: BuildChartDataOptions): ChartData {
   const fields: FieldMeta[] = columns.map((col) => {
     const kind = mapKind(col.type, col);
     const format = kind === "number" ? formatHint(col.name) : undefined;
@@ -93,7 +98,11 @@ export function assertReadOnlySql(sql: string): void {
   const t = sql.trim().replace(/;\s*$/, "");
   if (/;/.test(t)) throw new Error("Only a single statement is allowed.");
   if (!/^(select|with)\b/i.test(t)) throw new Error("Only read-only SELECT queries are allowed.");
-  if (/\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|call|export|load|copy|execute|attach|vacuum|lock)\b/i.test(t)) {
+  if (
+    /\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|call|export|load|copy|execute|attach|vacuum|lock)\b/i.test(
+      t,
+    )
+  ) {
     throw new Error("Write/DDL statements are not allowed.");
   }
 }

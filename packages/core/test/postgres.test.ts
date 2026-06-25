@@ -33,8 +33,13 @@ describe("postgresToChartData — typing from real Postgres OIDs", () => {
     const data = await run("SELECT region, month, revenue, win_rate, big, amount, active FROM orders ORDER BY month");
     assertChartDataShape(data);
     assertKinds(data, {
-      region: "string", month: "time", revenue: "number",
-      win_rate: "number", big: "number", amount: "number", active: "boolean",
+      region: "string",
+      month: "time",
+      revenue: "number",
+      win_rate: "number",
+      big: "number",
+      amount: "number",
+      active: "boolean",
     });
     expect(data.fields!.find((f) => f.name === "win_rate")?.format).toBe("percent"); // *_rate heuristic
     expect(data.rows[0]).toMatchObject({ region: "EU", month: "2026-01-01", revenue: 100, amount: 12.5, active: true });

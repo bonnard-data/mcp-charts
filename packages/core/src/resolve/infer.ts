@@ -79,7 +79,10 @@ export function inferFields(data: ChartData): FieldMeta[] {
     // Time columns with no declared granularity: infer it from the value shape (YYYY-MM -> month).
     // declared > value-sniff > name-hint
     const granularity =
-      d?.granularity ?? (kind === "time" ? (sniffTimeGranularity(rows.find((r) => r[name] != null)?.[name]) ?? granularityHint(name)) : undefined);
+      d?.granularity ??
+      (kind === "time"
+        ? (sniffTimeGranularity(rows.find((r) => r[name] != null)?.[name]) ?? granularityHint(name))
+        : undefined);
     // declared > name-hint (rate -> percent); only for numeric columns
     const format = d?.format ?? (kind === "number" ? formatHint(name) : undefined);
     return {
@@ -92,5 +95,5 @@ export function inferFields(data: ChartData): FieldMeta[] {
       ...(d?.additive != null && { additive: d.additive }),
       ...(d?.currency && { currency: d.currency }),
     };
-  }) as FieldMeta[];
+  });
 }

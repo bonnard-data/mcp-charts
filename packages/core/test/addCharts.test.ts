@@ -30,7 +30,9 @@ async function connect(configure: (s: McpServer) => void): Promise<Client> {
 
 describe("addCharts (SQL mode)", () => {
   it("registers a visualize tool with sql + presentation inputs", async () => {
-    const client = await connect((s) => addCharts(s, { runSql: fakeRunSql, discovery: { toolName: "explore_schema" } }));
+    const client = await connect((s) =>
+      addCharts(s, { runSql: fakeRunSql, discovery: { toolName: "explore_schema" } }),
+    );
     const { tools } = await client.listTools();
     const viz = tools.find((t) => t.name === "visualize");
     expect(viz).toBeDefined();
@@ -43,7 +45,11 @@ describe("addCharts (SQL mode)", () => {
     const client = await connect((s) => addCharts(s, { runSql: fakeRunSql }));
     const res = (await client.callTool({
       name: "visualize",
-      arguments: { sql: "SELECT region, SUM(amount) revenue FROM orders GROUP BY 1", chartType: "bar", title: "Revenue by region" },
+      arguments: {
+        sql: "SELECT region, SUM(amount) revenue FROM orders GROUP BY 1",
+        chartType: "bar",
+        title: "Revenue by region",
+      },
     })) as any;
 
     const spec = res.structuredContent;
@@ -69,7 +75,10 @@ describe("addCharts (SQL mode)", () => {
       ],
     });
     const client = await connect((s) => addCharts(s, { runSql: bigRunSql }));
-    const res = (await client.callTool({ name: "visualize", arguments: { sql: "SELECT ...", chartType: "line" } })) as any;
+    const res = (await client.callTool({
+      name: "visualize",
+      arguments: { sql: "SELECT ...", chartType: "line" },
+    })) as any;
     // The chart (structuredContent) keeps every point; the text echo is capped.
     expect(res.structuredContent.data.length).toBe(100);
     expect(res.content[0].text).toContain("first 50 of 100 rows");
@@ -83,7 +92,11 @@ describe("addCharts (SQL mode)", () => {
 
   it("surfaces data-source errors as a tool error", async () => {
     const client = await connect((s) =>
-      addCharts(s, { runSql: async () => { throw new Error("syntax error near FROM"); } }),
+      addCharts(s, {
+        runSql: async () => {
+          throw new Error("syntax error near FROM");
+        },
+      }),
     );
     const res = (await client.callTool({ name: "visualize", arguments: { sql: "bad" } })) as any;
     expect(res.isError).toBe(true);
@@ -102,7 +115,7 @@ describe("addCharts (SQL mode)", () => {
     const read = await client.readResource({ uri: "ui://bonnard/chart" });
     const first = read.contents[0] as any;
     expect(first.mimeType).toBe("text/html;profile=mcp-app");
-    expect(first.text).toContain("<!DOCTYPE html>");
+    expect(first.text).toMatch(/<!doctype html>/i);
   });
 
   it("rejects a non-array rows return with a clear error", async () => {

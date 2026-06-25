@@ -45,6 +45,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Validate package shape + type resolution before anything is published.
+      - name: Validate package
+        run: pnpm check:exports
+
       - name: Publish with provenance
         working-directory: packages/core
         env:

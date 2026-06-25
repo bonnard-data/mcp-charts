@@ -8,7 +8,13 @@ export interface Fixture {
   opts: ResolveOptions;
 }
 
-const cur = (name: string) => ({ name, role: "measure" as const, kind: "number" as const, format: "currency" as const, currency: "USD" });
+const cur = (name: string) => ({
+  name,
+  role: "measure" as const,
+  kind: "number" as const,
+  format: "currency" as const,
+  currency: "USD",
+});
 
 export const fixtures: Fixture[] = [
   {
@@ -99,10 +105,7 @@ export const fixtures: Fixture[] = [
         { month: "2026-05-01", revenue: 15500 },
         { month: "2026-06-01", revenue: 20300 },
       ],
-      fields: [
-        { name: "month", role: "time", kind: "time", granularity: "month" },
-        cur("revenue"),
-      ],
+      fields: [{ name: "month", role: "time", kind: "time", granularity: "month" }, cur("revenue")],
     },
   },
   {
@@ -183,11 +186,7 @@ export const fixtures: Fixture[] = [
         { month: "2026-05-01", revenue: 17400, target: 17000 },
         { month: "2026-06-01", revenue: 21300, target: 17500 },
       ],
-      fields: [
-        { name: "month", role: "time", kind: "time", granularity: "month" },
-        cur("revenue"),
-        cur("target"),
-      ],
+      fields: [{ name: "month", role: "time", kind: "time", granularity: "month" }, cur("revenue"), cur("target")],
     },
   },
   {
@@ -333,7 +332,11 @@ export const fixtures: Fixture[] = [
         { customer: "Globex", orders: 18, revenue: 41000 },
         { customer: "Soylent", orders: 9, revenue: 12000 },
       ],
-      fields: [{ name: "customer", role: "dimension", kind: "string" }, { name: "orders", role: "measure", kind: "number" }, cur("revenue")],
+      fields: [
+        { name: "customer", role: "dimension", kind: "string" },
+        { name: "orders", role: "measure", kind: "number" },
+        cur("revenue"),
+      ],
     },
   },
   {
@@ -369,7 +372,10 @@ export const fixtures: Fixture[] = [
         { stage: "Paid", users: 760 },
         { stage: "Renewed", users: 540 },
       ],
-      fields: [{ name: "stage", role: "dimension", kind: "string" }, { name: "users", role: "measure", kind: "number" }],
+      fields: [
+        { name: "stage", role: "dimension", kind: "string" },
+        { name: "users", role: "measure", kind: "number" },
+      ],
     },
   },
   {

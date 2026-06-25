@@ -3,12 +3,25 @@
 // Tables are rendered separately (not a chart-library job) — see table.ts/renderTable.
 import type { ChartSpec, FieldFormat } from "@bonnard/mcp-charts";
 import type { ComposeOption } from "echarts/core";
-import type { BarSeriesOption, LineSeriesOption, PieSeriesOption, ScatterSeriesOption, FunnelSeriesOption } from "echarts/charts";
+import type {
+  BarSeriesOption,
+  LineSeriesOption,
+  PieSeriesOption,
+  ScatterSeriesOption,
+  FunnelSeriesOption,
+} from "echarts/charts";
 import type { GridComponentOption, TooltipComponentOption, LegendComponentOption } from "echarts/components";
 import { esc, fmt, fmtX } from "./format.js";
 
 export type ECOption = ComposeOption<
-  BarSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | FunnelSeriesOption | GridComponentOption | TooltipComponentOption | LegendComponentOption
+  | BarSeriesOption
+  | LineSeriesOption
+  | PieSeriesOption
+  | ScatterSeriesOption
+  | FunnelSeriesOption
+  | GridComponentOption
+  | TooltipComponentOption
+  | LegendComponentOption
 >;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,7 +71,9 @@ function scatterOption(spec: ChartSpec): ECOption {
       formatter: (p: TipParam) => {
         const d = p.data as unknown[];
         const head = d[3] != null ? `${esc(d[3])}<br/>` : "";
-        const sizeLine = sizeKey ? `<br/>${esc(spec.columns?.find((c) => c.key === sizeKey)?.label ?? sizeKey)}: ${fmt(d[2])}` : "";
+        const sizeLine = sizeKey
+          ? `<br/>${esc(spec.columns?.find((c) => c.key === sizeKey)?.label ?? sizeKey)}: ${fmt(d[2])}`
+          : "";
         return `${head}${esc(spec.xAxis?.label ?? spec.x)}: ${xFmt(d[0])}<br/>${esc(spec.series[0]?.label ?? yKey)}: ${yFmt(d[1])}${sizeLine}`;
       },
     },
@@ -68,11 +83,11 @@ function scatterOption(spec: ChartSpec): ECOption {
       axisLabel: { formatter: (v: number) => xFmt(v) },
       axisLine: { onZero: false },
       splitLine: { show: true },
-    } as ECOption["xAxis"],
+    },
     yAxis: {
       type: "value",
       axisLabel: { formatter: (v: number) => yFmt(v) },
-    } as ECOption["yAxis"],
+    },
     series: [
       {
         type: "scatter",
@@ -188,16 +203,19 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
               const arr = Array.isArray(params) ? params : [params];
               const head = esc(arr[0]?.axisValueLabel ?? "");
               const body = arr
-                .map((p: TipParam) => `${p.marker}${esc(p.seriesName)}: ${fmt(p.data?.raw, spec.yAxis?.format, cur)} (${p.value}%)`)
+                .map(
+                  (p: TipParam) =>
+                    `${p.marker}${esc(p.seriesName)}: ${fmt(p.data?.raw, spec.yAxis?.format, cur)} (${p.value}%)`,
+                )
                 .join("<br/>");
               return `${head}<br/>${body}`;
             },
           }
         : {}),
     },
-    xAxis: (horizontal ? leftAxis : numericX ? numericXAxis : catAxis) as ECOption["xAxis"],
-    yAxis: yAxis as ECOption["yAxis"],
-    series: series as ECOption["series"],
+    xAxis: horizontal ? leftAxis : numericX ? numericXAxis : catAxis,
+    yAxis: yAxis,
+    series: series,
   };
 }
 
@@ -208,7 +226,10 @@ function funnelOption(spec: ChartSpec): ECOption {
   const vfmt = (v: unknown) => fmt(v, col?.format, col?.currency);
   const data = spec.data.map((r) => ({ name: String(r[spec.x]), value: Number(r[key]) || 0 }));
   return {
-    tooltip: { trigger: "item", formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${vfmt(p.value)} (${p.percent}%)` },
+    tooltip: {
+      trigger: "item",
+      formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${vfmt(p.value)} (${p.percent}%)`,
+    },
     series: [
       {
         type: "funnel",
@@ -239,7 +260,9 @@ function waterfallOption(spec: ChartSpec): ECOption {
   const vf = (v: unknown) => fmt(v, col?.format, col?.currency);
   const totals = new Set(spec.totals ?? []);
   const cats = spec.data.map((r) => String(r[spec.x]));
-  const INCREASE = "#10b981", DECREASE = "#ef4444", TOTAL = "#6b7280";
+  const INCREASE = "#10b981",
+    DECREASE = "#ef4444",
+    TOTAL = "#6b7280";
 
   const base: number[] = [];
   const bars: { value: number; itemStyle: { color: string } }[] = [];
@@ -270,10 +293,22 @@ function waterfallOption(spec: ChartSpec): ECOption {
         return `${esc(r?.[spec.x])}: ${vf(Number(r?.[key]))}`;
       },
     },
-    xAxis: { type: "category", data: cats, axisLine: { onZero: false }, axisLabel: { hideOverlap: true } } as ECOption["xAxis"],
-    yAxis: { type: "value", axisLabel: { formatter: (v: number) => vf(v) } } as ECOption["yAxis"],
+    xAxis: {
+      type: "category",
+      data: cats,
+      axisLine: { onZero: false },
+      axisLabel: { hideOverlap: true },
+    },
+    yAxis: { type: "value", axisLabel: { formatter: (v: number) => vf(v) } },
     series: [
-      { type: "bar", stack: "wf", itemStyle: { color: "transparent" }, emphasis: { disabled: true }, silent: true, data: base },
+      {
+        type: "bar",
+        stack: "wf",
+        itemStyle: { color: "transparent" },
+        emphasis: { disabled: true },
+        silent: true,
+        data: base,
+      },
       {
         type: "bar",
         stack: "wf",

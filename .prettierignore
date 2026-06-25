@@ -1,0 +1,7 @@
+dist
+node_modules
+packages/core/src/generated
+pnpm-lock.yaml
+*.md
+.changeset
+.github
