@@ -21,6 +21,7 @@ export type {
   SeriesSpec,
   AxisSpec,
   ColumnSpec,
+  ReferenceLine,
   ResolveOptions,
 } from "./types.js";
 

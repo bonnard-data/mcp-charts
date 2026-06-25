@@ -150,3 +150,31 @@ describe("specToOption — stacked100", () => {
     expect(all.every((d: any) => typeof d === "object" && d.value <= 100 && "raw" in d)).toBe(true);
   });
 });
+
+describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {
+  const evil = "<img src=x onerror=alert(1)>";
+
+  it("pie tooltip escapes the category name", () => {
+    const spec = resolveSpec({ rows: [{ region: evil, revenue: 10 }, { region: "US", revenue: 20 }] }, { chartType: "pie" });
+    const o: any = specToOption(spec);
+    const html = o.tooltip.formatter({ marker: "", name: evil, value: 10, percent: 33 });
+    expect(html).toContain("&lt;img");
+    expect(html).not.toContain("<img");
+  });
+
+  it("funnel tooltip escapes the stage name", () => {
+    const spec = resolveSpec({ rows: [{ stage: evil, users: 100 }, { stage: "b", users: 50 }] }, { chartType: "funnel" });
+    const o: any = specToOption(spec);
+    const html = o.tooltip.formatter({ marker: "", name: evil, value: 100, percent: 50 });
+    expect(html).toContain("&lt;img");
+    expect(html).not.toContain("<img");
+  });
+
+  it("waterfall tooltip escapes the step label from row data", () => {
+    const spec = resolveSpec({ rows: [{ step: evil, amount: 100 }, { step: "End", amount: 50 }] }, { chartType: "waterfall" });
+    const o: any = specToOption(spec);
+    const html = o.tooltip.formatter({ dataIndex: 0 });
+    expect(html).toContain("&lt;img");
+    expect(html).not.toContain("<img");
+  });
+});

@@ -93,7 +93,7 @@ export function assertReadOnlySql(sql: string): void {
   const t = sql.trim().replace(/;\s*$/, "");
   if (/;/.test(t)) throw new Error("Only a single statement is allowed.");
   if (!/^(select|with)\b/i.test(t)) throw new Error("Only read-only SELECT queries are allowed.");
-  if (/\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|call|export|load)\b/i.test(t)) {
+  if (/\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|call|export|load|copy|execute|attach|vacuum|lock)\b/i.test(t)) {
     throw new Error("Write/DDL statements are not allowed.");
   }
 }

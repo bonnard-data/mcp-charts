@@ -13,7 +13,7 @@ const ALL_CHART_TYPES: ChartType[] = ["line", "bar", "area", "pie", "scatter", "
 const CHART_RESOURCE_URI = "ui://bonnard/chart";
 const APP_MIME_TYPE = "text/html;profile=mcp-app";
 
-/** Data sources the dev wires. Exactly one selects the agent-facing tool mode. */
+/** Options for addCharts. */
 export interface AddChartsOptions {
   /** SQL mode: the agent writes SQL; you execute it read-only and return rows. */
   runSql?: (sql: string, ctx: ChartContext) => Promise<ChartData>;
@@ -25,34 +25,7 @@ export interface AddChartsOptions {
   toolName?: string;
 }
 
-/** A mode: its agent-facing data-authoring input + how to turn args into ChartData. */
-interface DataSource {
-  inputSchema: Record<string, z.ZodTypeAny>;
-  description: string;
-  fetch(args: Record<string, unknown>, ctx: ChartContext): Promise<ChartData>;
-}
-
-function createSqlSource(
-  runSql: NonNullable<AddChartsOptions["runSql"]>,
-  options: AddChartsOptions,
-): DataSource {
-  const disc = options.discovery?.toolName
-    ? ` First call \`${options.discovery.toolName}\` to discover tables and columns.`
-    : "";
-  return {
-    inputSchema: { sql: z.string().describe("A single read-only SQL SELECT statement") },
-    description:
-      "Render an interactive chart from a read-only SQL SELECT." +
-      disc +
-      " Alias columns clearly. Omit chartType to auto-detect; pass `encode` to map columns" +
-      " to x / y / series when the names aren't obvious.",
-    async fetch(args, ctx) {
-      return runSql(String(args.sql), ctx);
-    },
-  };
-}
-
-/** Presentation inputs shared by every mode. */
+/** Presentation inputs shared by every chart. */
 function presentationInput(allow: ChartType[]): Record<string, z.ZodTypeAny> {
   return {
     chartType: z
@@ -143,12 +116,24 @@ function registerWidgetResource(server: McpServer): void {
 export function addCharts(server: McpServer, options: AddChartsOptions): void {
   const allow = options.allow ?? ALL_CHART_TYPES;
 
-  if (!options.runSql) {
+  const { runSql } = options;
+  if (!runSql) {
     throw new Error("addCharts: provide a data source (e.g. { runSql })");
   }
-  const source: DataSource = createSqlSource(options.runSql, options);
 
-  const inputSchema = { ...source.inputSchema, ...presentationInput(allow) };
+  const disc = options.discovery?.toolName
+    ? ` First call \`${options.discovery.toolName}\` to discover tables and columns.`
+    : "";
+  const description =
+    "Render an interactive chart from a read-only SQL SELECT." +
+    disc +
+    " Alias columns clearly. Omit chartType to auto-detect; pass `encode` to map columns" +
+    " to x / y / series when the names aren't obvious.";
+
+  const inputSchema = {
+    sql: z.string().describe("A single read-only SQL SELECT statement"),
+    ...presentationInput(allow),
+  };
 
   // Register the chart widget as a ui:// resource (MCP Apps). Idempotent across calls.
   registerWidgetResource(server);
@@ -157,7 +142,7 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
     options.toolName ?? "visualize",
     {
       title: "Visualize",
-      description: source.description,
+      description,
       inputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
       // Link the tool to its widget. `ui.resourceUri` is the MCP Apps standard (Claude,
@@ -170,7 +155,7 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
     async (args: Record<string, unknown>) => {
       const ctx: ChartContext = {};
       try {
-        const data = await source.fetch(args, ctx);
+        const data = await runSql(String(args.sql), ctx);
         validateRowsShape(data.rows); // fail loud on a wrong shape (not array / not objects)
         const title = args.title as string | undefined;
         if (data.rows.length === 0) return emptyResult(title); // friendly "no rows" state

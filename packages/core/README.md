@@ -26,6 +26,12 @@ import { postgresRunSql } from "@bonnard/mcp-charts/postgres";
 addCharts(server, { runSql: postgresRunSql(pool) });
 ```
 
+## Read-only access
+
+The agent writes the SQL, so run it through a **read-only database role** — that is the security
+boundary. The bundled adapters also apply a lightweight SELECT-only check (`assertReadOnlySql`), but
+treat that as a guardrail, not a substitute for least-privilege credentials.
+
 Full docs and examples: https://github.com/bonnard-data/mcp-charts
 
 ## License
