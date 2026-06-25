@@ -1,23 +1,15 @@
 name: Publish to npm
 
+# Publishes the version currently in packages/core/package.json.
+# Bump the version locally (npm version ... + push) BEFORE running this — see README "Releasing".
+# CI is intentionally read-only here (the org disables workflow write); it never commits or tags.
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version bump (patch, minor, major)'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # commit the version bump + tag
       id-token: write # npm provenance
     steps:
       - name: Checkout
@@ -35,12 +27,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Bump version
-        working-directory: packages/core
-        env:
-          BUMP: ${{ inputs.version }}
-        run: npm version "$BUMP" --no-git-tag-version
-
       # Builds the widget, then core (embeds the fresh widget) — the publishable artifact.
       - name: Build
         run: pnpm build
@@ -54,13 +40,3 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
-
-      - name: Commit version bump
-        run: |
-          NEW_VERSION=$(node -p "require('./packages/core/package.json').version")
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/core/package.json
-          git commit -m "Release @bonnard/mcp-charts v${NEW_VERSION}"
-          git tag "mcp-charts-v${NEW_VERSION}"
-          git push origin main --tags
