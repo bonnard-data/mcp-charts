@@ -1,0 +1,21 @@
+{
+  "name": "bonnard-mcp-charts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "pnpm -F @bonnard/mcp-charts-widget build && pnpm -F @bonnard/mcp-charts build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "dev": "pnpm -r --parallel dev",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.9",
+    "typescript": "^5.6.0"
+  }
+}
