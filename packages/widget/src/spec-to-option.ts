@@ -5,7 +5,7 @@ import type { ChartSpec, FieldFormat } from "@bonnard/mcp-charts";
 import type { ComposeOption } from "echarts/core";
 import type { BarSeriesOption, LineSeriesOption, PieSeriesOption, ScatterSeriesOption, FunnelSeriesOption } from "echarts/charts";
 import type { GridComponentOption, TooltipComponentOption, LegendComponentOption } from "echarts/components";
-import { fmt, fmtX } from "./format.js";
+import { esc, fmt, fmtX } from "./format.js";
 
 export type ECOption = ComposeOption<
   BarSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | FunnelSeriesOption | GridComponentOption | TooltipComponentOption | LegendComponentOption
@@ -57,9 +57,9 @@ function scatterOption(spec: ChartSpec): ECOption {
       trigger: "item",
       formatter: (p: TipParam) => {
         const d = p.data as unknown[];
-        const head = d[3] != null ? `${d[3]}<br/>` : "";
-        const sizeLine = sizeKey ? `<br/>${spec.columns?.find((c) => c.key === sizeKey)?.label ?? sizeKey}: ${fmt(d[2])}` : "";
-        return `${head}${spec.xAxis?.label ?? spec.x}: ${xFmt(d[0])}<br/>${spec.series[0]?.label ?? yKey}: ${yFmt(d[1])}${sizeLine}`;
+        const head = d[3] != null ? `${esc(d[3])}<br/>` : "";
+        const sizeLine = sizeKey ? `<br/>${esc(spec.columns?.find((c) => c.key === sizeKey)?.label ?? sizeKey)}: ${fmt(d[2])}` : "";
+        return `${head}${esc(spec.xAxis?.label ?? spec.x)}: ${xFmt(d[0])}<br/>${esc(spec.series[0]?.label ?? yKey)}: ${yFmt(d[1])}${sizeLine}`;
       },
     },
     xAxis: {
@@ -186,9 +186,9 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
         ? {
             formatter: (params: TipParam) => {
               const arr = Array.isArray(params) ? params : [params];
-              const head = arr[0]?.axisValueLabel ?? "";
+              const head = esc(arr[0]?.axisValueLabel ?? "");
               const body = arr
-                .map((p: TipParam) => `${p.marker}${p.seriesName}: ${fmt(p.data?.raw, spec.yAxis?.format, cur)} (${p.value}%)`)
+                .map((p: TipParam) => `${p.marker}${esc(p.seriesName)}: ${fmt(p.data?.raw, spec.yAxis?.format, cur)} (${p.value}%)`)
                 .join("<br/>");
               return `${head}<br/>${body}`;
             },
@@ -208,7 +208,7 @@ function funnelOption(spec: ChartSpec): ECOption {
   const vfmt = (v: unknown) => fmt(v, col?.format, col?.currency);
   const data = spec.data.map((r) => ({ name: String(r[spec.x]), value: Number(r[key]) || 0 }));
   return {
-    tooltip: { trigger: "item", formatter: (p: TipParam) => `${p.marker}${p.name}: ${vfmt(p.value)} (${p.percent}%)` },
+    tooltip: { trigger: "item", formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${vfmt(p.value)} (${p.percent}%)` },
     series: [
       {
         type: "funnel",
@@ -267,7 +267,7 @@ function waterfallOption(spec: ChartSpec): ECOption {
       trigger: "item",
       formatter: (p: TipParam) => {
         const r = spec.data[p.dataIndex as number];
-        return `${r?.[spec.x]}: ${vf(Number(r?.[key]))}`;
+        return `${esc(r?.[spec.x])}: ${vf(Number(r?.[key]))}`;
       },
     },
     xAxis: { type: "category", data: cats, axisLine: { onZero: false }, axisLabel: { hideOverlap: true } } as ECOption["xAxis"],
@@ -299,7 +299,7 @@ function pieOption(spec: ChartSpec): ECOption {
     legend: { bottom: 0, type: "scroll", icon: "roundRect" },
     tooltip: {
       trigger: "item",
-      formatter: (p: TipParam) => `${p.marker}${p.name}: ${fmt(p.value, yfmt, cur)} (${p.percent}%)`,
+      formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${fmt(p.value, yfmt, cur)} (${p.percent}%)`,
     },
     series: [
       {
