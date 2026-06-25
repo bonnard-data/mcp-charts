@@ -1,0 +1,106 @@
+{
+  "name": "@bonnard/mcp-charts",
+  "version": "0.1.0",
+  "description": "Add beautiful, agent-ready charts to your MCP server in a few lines.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Bonnard (bonnard-data)",
+  "homepage": "https://github.com/bonnard-data/mcp-charts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bonnard-data/mcp-charts.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/bonnard-data/mcp-charts/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bigquery": {
+      "types": "./dist/bigquery.d.ts",
+      "import": "./dist/bigquery.js"
+    },
+    "./duckdb": {
+      "types": "./dist/duckdb.d.ts",
+      "import": "./dist/duckdb.js"
+    },
+    "./postgres": {
+      "types": "./dist/postgres.d.ts",
+      "import": "./dist/postgres.js"
+    },
+    "./snowflake": {
+      "types": "./dist/snowflake.d.ts",
+      "import": "./dist/snowflake.js"
+    },
+    "./databricks": {
+      "types": "./dist/databricks.d.ts",
+      "import": "./dist/databricks.js"
+    }
+  },
+  "scripts": {
+    "embed": "node scripts/embed-widget.mjs",
+    "prebuild": "node scripts/embed-widget.mjs",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "charts",
+    "visualization",
+    "mcp-apps",
+    "ai"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@databricks/sql": "^1.0.0",
+    "@duckdb/node-api": "^1.0.0",
+    "@google-cloud/bigquery": "^7.0.0 || ^8.0.0",
+    "@modelcontextprotocol/sdk": ">=1.27.0",
+    "pg": "^8.0.0",
+    "snowflake-sdk": "^1.9.0 || ^2.0.0 || ^3.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@databricks/sql": {
+      "optional": true
+    },
+    "@duckdb/node-api": {
+      "optional": true
+    },
+    "@google-cloud/bigquery": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "snowflake-sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@databricks/sql": "^1.16.0",
+    "@duckdb/node-api": "1.5.4-r.1",
+    "@electric-sql/pglite": "^0.5.3",
+    "@google-cloud/bigquery": "^8.3.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.20.0",
+    "snowflake-sdk": "^3.0.0",
+    "tsup": "^8.5.0",
+    "vitest": "^3.2.0",
+    "zod": "^4.4.0"
+  }
+}

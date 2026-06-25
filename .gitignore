@@ -1,0 +1,13 @@
+node_modules
+dist
+.turbo
+coverage
+*.log
+.DS_Store
+.env
+.env.local
+__visuals__
+gallery.html
+
+# internal dev backlog — not for the public package repo
+NOTES.md

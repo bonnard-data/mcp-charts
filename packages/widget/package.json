@@ -1,0 +1,25 @@
+{
+  "name": "@bonnard/mcp-charts-widget",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The in-iframe chart widget (cross-host adapter + renderer), bundled to a single HTML file and embedded into @bonnard/mcp-charts.",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "echarts": "^6.1.0"
+  },
+  "devDependencies": {
+    "@bonnard/mcp-charts": "workspace:*",
+    "linkedom": "^0.18.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.1.0",
+    "vitest": "^3.2.0"
+  }
+}
