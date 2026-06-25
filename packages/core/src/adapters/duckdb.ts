@@ -7,13 +7,27 @@ import type { ChartData, FieldKind } from "../types.js";
 import { buildChartData, type SourceColumn } from "./sql.js";
 
 const NUMERIC = new Set<DuckDBTypeId>([
-  DuckDBTypeId.TINYINT, DuckDBTypeId.SMALLINT, DuckDBTypeId.INTEGER, DuckDBTypeId.BIGINT, DuckDBTypeId.HUGEINT,
-  DuckDBTypeId.UTINYINT, DuckDBTypeId.USMALLINT, DuckDBTypeId.UINTEGER, DuckDBTypeId.UBIGINT, DuckDBTypeId.UHUGEINT,
-  DuckDBTypeId.FLOAT, DuckDBTypeId.DOUBLE, DuckDBTypeId.DECIMAL,
+  DuckDBTypeId.TINYINT,
+  DuckDBTypeId.SMALLINT,
+  DuckDBTypeId.INTEGER,
+  DuckDBTypeId.BIGINT,
+  DuckDBTypeId.HUGEINT,
+  DuckDBTypeId.UTINYINT,
+  DuckDBTypeId.USMALLINT,
+  DuckDBTypeId.UINTEGER,
+  DuckDBTypeId.UBIGINT,
+  DuckDBTypeId.UHUGEINT,
+  DuckDBTypeId.FLOAT,
+  DuckDBTypeId.DOUBLE,
+  DuckDBTypeId.DECIMAL,
 ]);
 const TEMPORAL = new Set<DuckDBTypeId>([
-  DuckDBTypeId.DATE, DuckDBTypeId.TIMESTAMP, DuckDBTypeId.TIMESTAMP_S, DuckDBTypeId.TIMESTAMP_MS,
-  DuckDBTypeId.TIMESTAMP_NS, DuckDBTypeId.TIMESTAMP_TZ,
+  DuckDBTypeId.DATE,
+  DuckDBTypeId.TIMESTAMP,
+  DuckDBTypeId.TIMESTAMP_S,
+  DuckDBTypeId.TIMESTAMP_MS,
+  DuckDBTypeId.TIMESTAMP_NS,
+  DuckDBTypeId.TIMESTAMP_TZ,
 ]);
 
 function duckKind(typeId: DuckDBTypeId): FieldKind {

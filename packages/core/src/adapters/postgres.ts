@@ -8,9 +8,16 @@ import { buildChartData, defaultNormalizeCell, type SourceColumn } from "./sql.j
 // protocol), stable across versions — the same constants pg-types ships as `builtins`.
 const OID = {
   BOOL: 16,
-  INT8: 20, INT2: 21, INT4: 23, OID: 26,
-  FLOAT4: 700, FLOAT8: 701, NUMERIC: 1700,
-  DATE: 1082, TIMESTAMP: 1114, TIMESTAMPTZ: 1184,
+  INT8: 20,
+  INT2: 21,
+  INT4: 23,
+  OID: 26,
+  FLOAT4: 700,
+  FLOAT8: 701,
+  NUMERIC: 1700,
+  DATE: 1082,
+  TIMESTAMP: 1114,
+  TIMESTAMPTZ: 1184,
 } as const;
 
 const NUMERIC = new Set<number>([OID.INT8, OID.INT2, OID.INT4, OID.OID, OID.FLOAT4, OID.FLOAT8, OID.NUMERIC]);

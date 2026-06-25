@@ -33,7 +33,14 @@ describe("snowflake adapter", () => {
   it("maps logical types -> FieldKind and normalizes to scalars", async () => {
     const data = await snowflakeRunSql(stubConnection())("SELECT * FROM orders");
     assertChartDataShape(data);
-    assertKinds(data, { REGION: "string", MONTH: "time", REVENUE: "number", WIN_RATE: "number", ACTIVE: "boolean", META: "string" });
+    assertKinds(data, {
+      REGION: "string",
+      MONTH: "time",
+      REVENUE: "number",
+      WIN_RATE: "number",
+      ACTIVE: "boolean",
+      META: "string",
+    });
     expect(data.fields!.find((f) => f.name === "WIN_RATE")?.format).toBe("percent");
     expect(data.rows[0]).toMatchObject({ REGION: "EU", MONTH: "2026-01-01", REVENUE: 100, ACTIVE: true });
     expect(typeof data.rows[0]!.META).toBe("string"); // variant stringified

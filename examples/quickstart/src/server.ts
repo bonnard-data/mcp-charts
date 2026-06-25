@@ -15,20 +15,32 @@ db.exec(`
   CREATE TABLE orders (id TEXT PRIMARY KEY, customer_id TEXT, amount REAL, status TEXT, created_at TEXT);
 `);
 const customers = [
-  ["c1", "Northwind", "EU", "enterprise"], ["c2", "Globex", "US", "pro"],
-  ["c3", "Initech", "US", "pro"], ["c4", "Umbrella", "EU", "enterprise"],
-  ["c5", "Soylent", "APAC", "free"], ["c6", "Hooli", "US", "enterprise"],
-  ["c7", "Stark", "EU", "pro"], ["c8", "Wonka", "APAC", "free"],
+  ["c1", "Northwind", "EU", "enterprise"],
+  ["c2", "Globex", "US", "pro"],
+  ["c3", "Initech", "US", "pro"],
+  ["c4", "Umbrella", "EU", "enterprise"],
+  ["c5", "Soylent", "APAC", "free"],
+  ["c6", "Hooli", "US", "enterprise"],
+  ["c7", "Stark", "EU", "pro"],
+  ["c8", "Wonka", "APAC", "free"],
 ];
 const orders = [
-  ["o1", "c1", 4200, "shipped", "2026-01-08"], ["o2", "c1", 3100, "shipped", "2026-02-02"],
-  ["o3", "c2", 900, "open", "2026-02-19"], ["o4", "c2", 1500, "shipped", "2026-01-21"],
-  ["o5", "c3", 1200, "cancelled", "2026-01-30"], ["o6", "c3", 2600, "shipped", "2026-03-01"],
-  ["o7", "c4", 8800, "shipped", "2026-02-11"], ["o8", "c4", 5400, "open", "2026-03-03"],
-  ["o9", "c5", 300, "shipped", "2026-02-27"], ["o10", "c6", 9100, "shipped", "2026-01-14"],
-  ["o11", "c6", 7300, "shipped", "2026-03-09"], ["o12", "c7", 2100, "open", "2026-02-28"],
-  ["o13", "c7", 1800, "shipped", "2026-01-25"], ["o14", "c8", 250, "cancelled", "2026-02-05"],
-  ["o15", "c1", 3900, "shipped", "2026-03-12"], ["o16", "c2", 1100, "shipped", "2026-03-15"],
+  ["o1", "c1", 4200, "shipped", "2026-01-08"],
+  ["o2", "c1", 3100, "shipped", "2026-02-02"],
+  ["o3", "c2", 900, "open", "2026-02-19"],
+  ["o4", "c2", 1500, "shipped", "2026-01-21"],
+  ["o5", "c3", 1200, "cancelled", "2026-01-30"],
+  ["o6", "c3", 2600, "shipped", "2026-03-01"],
+  ["o7", "c4", 8800, "shipped", "2026-02-11"],
+  ["o8", "c4", 5400, "open", "2026-03-03"],
+  ["o9", "c5", 300, "shipped", "2026-02-27"],
+  ["o10", "c6", 9100, "shipped", "2026-01-14"],
+  ["o11", "c6", 7300, "shipped", "2026-03-09"],
+  ["o12", "c7", 2100, "open", "2026-02-28"],
+  ["o13", "c7", 1800, "shipped", "2026-01-25"],
+  ["o14", "c8", 250, "cancelled", "2026-02-05"],
+  ["o15", "c1", 3900, "shipped", "2026-03-12"],
+  ["o16", "c2", 1100, "shipped", "2026-03-15"],
 ];
 for (const c of customers) db.prepare("INSERT INTO customers VALUES (?,?,?,?)").run(...c);
 for (const o of orders) db.prepare("INSERT INTO orders VALUES (?,?,?,?,?)").run(...o);
@@ -48,7 +60,10 @@ server.registerTool(
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
     const schema = tables.map((t) => ({
       table: t.name,
-      columns: (db.prepare(`PRAGMA table_info(${t.name})`).all() as { name: string; type: string }[]).map((c) => ({ name: c.name, type: c.type })),
+      columns: (db.prepare(`PRAGMA table_info(${t.name})`).all() as { name: string; type: string }[]).map((c) => ({
+        name: c.name,
+        type: c.type,
+      })),
     }));
     return { content: [{ type: "text", text: JSON.stringify(schema, null, 2) }] };
   },

@@ -42,5 +42,10 @@ export interface SnowflakeColumn {
  */
 export function snowflakeToChartData(rows: Record<string, unknown>[], columns: SnowflakeColumn[]): ChartData {
   const cols: SourceColumn[] = columns.map((c) => ({ name: c.name, type: c.type }));
-  return buildChartData({ rows, columns: cols, mapKind: (type) => snowflakeKind(type as string), normalizeCell: snowflakeNormalize });
+  return buildChartData({
+    rows,
+    columns: cols,
+    mapKind: (type) => snowflakeKind(type as string),
+    normalizeCell: snowflakeNormalize,
+  });
 }

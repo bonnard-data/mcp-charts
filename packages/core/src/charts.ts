@@ -57,7 +57,9 @@ function presentationInput(allow: ChartType[]): Record<string, z.ZodTypeAny> {
         line: z
           .union([z.string(), z.array(z.string())])
           .optional()
-          .describe("Measure(s) to draw as a line instead of bars on the same axis (e.g. actual bars + target/forecast/moving-average line). Compute that measure in SQL, include it in y, and name it here."),
+          .describe(
+            "Measure(s) to draw as a line instead of bars on the same axis (e.g. actual bars + target/forecast/moving-average line). Compute that measure in SQL, include it in y, and name it here.",
+          ),
         size: z
           .string()
           .optional()
@@ -81,7 +83,9 @@ function buildResult(spec: ChartSpec) {
   const notes = spec.notes?.length ? `\nNote: ${spec.notes.join(" ")}` : "";
   const truncated = spec.data.length > ECHO_SAMPLE;
   const sample = truncated ? spec.data.slice(0, ECHO_SAMPLE) : spec.data;
-  const sampleNote = truncated ? `\n(text shows the first ${ECHO_SAMPLE} of ${spec.data.length} rows; the chart has all of them)` : "";
+  const sampleNote = truncated
+    ? `\n(text shows the first ${ECHO_SAMPLE} of ${spec.data.length} rows; the chart has all of them)`
+    : "";
   return {
     content: [{ type: "text" as const, text: `${head}${notes}${sampleNote}\n${JSON.stringify(sample)}` }],
     structuredContent: spec as unknown as Record<string, unknown>,
@@ -90,7 +94,15 @@ function buildResult(spec: ChartSpec) {
 
 /** A clean "no rows" result — not an error; renders an empty chart, not a broken one. */
 function emptyResult(title?: string) {
-  const spec: ChartSpec = { chartType: "table", data: [], x: "", series: [], legend: false, ...(title && { title }), columns: [] };
+  const spec: ChartSpec = {
+    chartType: "table",
+    data: [],
+    x: "",
+    series: [],
+    legend: false,
+    ...(title && { title }),
+    columns: [],
+  };
   return {
     content: [{ type: "text" as const, text: `No rows returned${title ? ` for "${title}"` : ""} — nothing to chart.` }],
     structuredContent: spec as unknown as Record<string, unknown>,
@@ -106,7 +118,7 @@ function registerWidgetResource(server: McpServer): void {
     "Bonnard Chart",
     CHART_RESOURCE_URI,
     { description: "Interactive chart widget", mimeType: APP_MIME_TYPE },
-    async () => ({
+    () => ({
       contents: [{ uri: CHART_RESOURCE_URI, mimeType: APP_MIME_TYPE, text: WIDGET_HTML }],
     }),
   );
@@ -179,4 +191,3 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
     },
   );
 }
-

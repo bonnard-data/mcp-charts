@@ -35,6 +35,12 @@ export function assertKinds(data: ChartData, expected: Record<string, FieldKind>
 
 /** Assert the adapter's read-only backstop rejects write / DDL statements. */
 export async function assertRejectsWrites(runSql: (sql: string) => Promise<unknown>): Promise<void> {
-  const writes = ["DELETE FROM t", "INSERT INTO t VALUES (1)", "UPDATE t SET x=1", "DROP TABLE t", "CREATE TABLE t(x INT)"];
+  const writes = [
+    "DELETE FROM t",
+    "INSERT INTO t VALUES (1)",
+    "UPDATE t SET x=1",
+    "DROP TABLE t",
+    "CREATE TABLE t(x INT)",
+  ];
   for (const sql of writes) await expect(runSql(sql), `should reject: ${sql}`).rejects.toThrow();
 }

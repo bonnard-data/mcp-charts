@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
@@ -6,24 +6,78 @@
     <title>Bonnard Chart</title>
     <style>
       :root {
-        --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --grid: #e5e7eb; --border: #e5e7eb;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #6b7280;
+        --grid: #e5e7eb;
+        --border: #e5e7eb;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
       }
       html[data-theme="dark"] {
-        --bg: #171717; --fg: #fafafa; --muted: #9ca3af; --grid: #2a2a2a; --border: #2a2a2a;
+        --bg: #171717;
+        --fg: #fafafa;
+        --muted: #9ca3af;
+        --grid: #2a2a2a;
+        --border: #2a2a2a;
       }
-      * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--fg); padding: 12px; }
-      #root { width: 100%; }
-      .title { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 12px;
+      }
+      #root {
+        width: 100%;
+      }
+      .title {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 8px;
+      }
       /* ECharts needs an explicit pixel height; it manages its own SVG sizing inside. */
-      .ec { width: 100%; height: 340px; }
-      .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-      .tbl th, .tbl td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
-      .tbl th { color: var(--muted); font-weight: 600; }
-      .tbl td:not(:first-child), .tbl th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-      .empty, .fallback { color: var(--muted); font-size: 13px; padding: 16px 4px; }
-      .fallback { white-space: pre-wrap; word-break: break-word; }
+      .ec {
+        width: 100%;
+        height: 340px;
+      }
+      .tbl {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .tbl th,
+      .tbl td {
+        text-align: left;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .tbl th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .tbl td:not(:first-child),
+      .tbl th:not(:first-child) {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .empty,
+      .fallback {
+        color: var(--muted);
+        font-size: 13px;
+        padding: 16px 4px;
+      }
+      .fallback {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
     </style>
   </head>
   <body>

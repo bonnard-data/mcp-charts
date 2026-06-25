@@ -27,7 +27,10 @@ export interface DatabricksRunSqlOptions {
 }
 
 /** Build the `runSql` callback for `addCharts` from an open Databricks SQL session. */
-export function databricksRunSql(session: DBSQLSession, opts: DatabricksRunSqlOptions = {}): (sql: string) => Promise<ChartData> {
+export function databricksRunSql(
+  session: DBSQLSession,
+  opts: DatabricksRunSqlOptions = {},
+): (sql: string) => Promise<ChartData> {
   const readOnly = opts.readOnly !== false;
   return async (sql: string): Promise<ChartData> => {
     if (readOnly) assertReadOnlySql(sql);

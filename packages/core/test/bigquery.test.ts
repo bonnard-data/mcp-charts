@@ -26,14 +26,17 @@ describe("bigQueryToChartData — typing from schema", () => {
   });
 
   it("infers percent from broadened name variants (snake, camelCase, percentage, ratio)", () => {
-    const { fields } = bigQueryToChartData([], [
-      { name: "approval_rate", type: "FLOAT64" },
-      { name: "approvalRate", type: "FLOAT64" }, // camelCase
-      { name: "conversion_percentage", type: "FLOAT64" }, // "percentage", not just "percent"
-      { name: "win_ratio", type: "FLOAT64" },
-      { name: "ctr_pct", type: "FLOAT64" },
-      { name: "revenue", type: "INT64" }, // not a percent
-    ]);
+    const { fields } = bigQueryToChartData(
+      [],
+      [
+        { name: "approval_rate", type: "FLOAT64" },
+        { name: "approvalRate", type: "FLOAT64" }, // camelCase
+        { name: "conversion_percentage", type: "FLOAT64" }, // "percentage", not just "percent"
+        { name: "win_ratio", type: "FLOAT64" },
+        { name: "ctr_pct", type: "FLOAT64" },
+        { name: "revenue", type: "INT64" }, // not a percent
+      ],
+    );
     const by = Object.fromEntries(fields!.map((f) => [f.name, f]));
     expect(by.approval_rate.format).toBe("percent");
     expect(by.approvalRate.format).toBe("percent");
@@ -44,10 +47,13 @@ describe("bigQueryToChartData — typing from schema", () => {
   });
 
   it("accepts GoogleSQL names too (INT64/FLOAT64), not just legacy (INTEGER/FLOAT)", () => {
-    const { fields } = bigQueryToChartData([], [
-      { name: "n", type: "INT64" },
-      { name: "x", type: "FLOAT64" },
-    ]);
+    const { fields } = bigQueryToChartData(
+      [],
+      [
+        { name: "n", type: "INT64" },
+        { name: "x", type: "FLOAT64" },
+      ],
+    );
     expect(fields!.every((f) => f.kind === "number")).toBe(true);
   });
 });
@@ -56,8 +62,14 @@ describe("bigQueryToChartData — value normalization", () => {
   it("coerces raw REST strings (incl. scientific-notation floats) to scalars by schema type", () => {
     // Exactly the shape `bq query --format=prettyjson` returns: everything a string.
     const rows = [
-      { region: "EU", customer: "Acme Corp", week_start: "2026-06-15",
-        orders_placed: "1389", orders_shipped: "1372", completion_rate: "7.199424046076314E-4" },
+      {
+        region: "EU",
+        customer: "Acme Corp",
+        week_start: "2026-06-15",
+        orders_placed: "1389",
+        orders_shipped: "1372",
+        completion_rate: "7.199424046076314E-4",
+      },
     ];
     const { rows: out } = bigQueryToChartData(rows, SCHEMA);
     expect(out[0]!.orders_placed).toBe(1389); // number, not "1389"
@@ -91,10 +103,7 @@ describe("bigQueryToChartData — value normalization", () => {
       { name: "meta", type: "RECORD", fields: [{ name: "a", type: "INT64" }] },
       { name: "n", type: "INT64" },
     ];
-    const { rows: out, fields } = bigQueryToChartData(
-      [{ k: "x", tags: ["a", "b"], meta: { a: 1 }, n: null }],
-      schema,
-    );
+    const { rows: out, fields } = bigQueryToChartData([{ k: "x", tags: ["a", "b"], meta: { a: 1 }, n: null }], schema);
     expect(out[0]!.tags).toBe('["a","b"]');
     expect(out[0]!.meta).toBe('{"a":1}');
     expect(out[0]!.n).toBeNull();
@@ -108,7 +117,13 @@ describe("bigQueryRunSql — packaged helper", () => {
     ({
       async createQueryJob(opts: any) {
         capture.opts = opts;
-        return [{ async getQueryResults() { return [rows, null, { schema: { fields: schema } }]; } }];
+        return [
+          {
+            async getQueryResults() {
+              return [rows, null, { schema: { fields: schema } }];
+            },
+          },
+        ];
       },
     }) as any;
 
@@ -117,7 +132,10 @@ describe("bigQueryRunSql — packaged helper", () => {
     const run = bigQueryRunSql(
       fakeBq(
         [{ week_start: "2026-06-15", n: "5" }],
-        [{ name: "week_start", type: "DATE" }, { name: "n", type: "INTEGER" }],
+        [
+          { name: "week_start", type: "DATE" },
+          { name: "n", type: "INTEGER" },
+        ],
         capture,
       ),
       { location: "europe-west2", maximumBytesBilled: "100", defaultDataset: "ds" },

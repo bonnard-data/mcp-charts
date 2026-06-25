@@ -20,9 +20,16 @@ jobs:
 
       - run: pnpm install --no-frozen-lockfile
 
+      - run: pnpm format:check
+
+      - run: pnpm lint
+
       - run: pnpm typecheck
 
       # Builds the widget first, then core (embeds the widget) — fails loudly if the widget is missing.
       - run: pnpm build
 
       - run: pnpm test
+
+      # Validate the publishable package: exports map + type resolution across module systems.
+      - run: pnpm check:exports

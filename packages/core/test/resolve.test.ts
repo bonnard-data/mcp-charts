@@ -29,8 +29,22 @@ describe("resolve()", () => {
     // Raw SQL join (rows only, no declared fields) — the case from the Claude Desktop test.
     const data: ChartData = {
       rows: [
-        { created_at: "2026-04-08", order_id: "o_1001", customer: "Hooli", region: "EU", status: "shipped", amount: 4200 },
-        { created_at: "2026-04-14", order_id: "o_1010", customer: "Globex", region: "US", status: "open", amount: 9100 },
+        {
+          created_at: "2026-04-08",
+          order_id: "o_1001",
+          customer: "Hooli",
+          region: "EU",
+          status: "shipped",
+          amount: 4200,
+        },
+        {
+          created_at: "2026-04-14",
+          order_id: "o_1010",
+          customer: "Globex",
+          region: "US",
+          status: "open",
+          amount: 9100,
+        },
       ],
     };
     const spec = resolve(data, { chartType: "table" });
@@ -262,10 +276,16 @@ describe("resolve() — P1 sort / pie Other / stacked fill", () => {
 
   it("pie: folds a long tail (>8 slices) into one 'Other', largest-first", () => {
     const rows = Array.from({ length: 12 }, (_, i) => ({ cat: `c${i}`, val: 12 - i }));
-    const spec = resolve({ rows, fields: [
-      { name: "cat", role: "dimension", kind: "string" },
-      { name: "val", role: "measure", kind: "number" },
-    ] }, { chartType: "pie" });
+    const spec = resolve(
+      {
+        rows,
+        fields: [
+          { name: "cat", role: "dimension", kind: "string" },
+          { name: "val", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "pie" },
+    );
     expect(spec.data.length).toBe(8); // 7 top + "Other"
     expect(spec.data.at(-1)?.cat).toBe("Other");
     // Other = sum of the 5 smallest (val 5,4,3,2,1) = 15
@@ -285,20 +305,32 @@ describe("resolve() — P1 sort / pie Other / stacked fill", () => {
       { cat: "F", val: 5 }, // ~0.5%
       { cat: "G", val: 4 }, // ~0.4%
     ];
-    const spec = resolve({ rows, fields: [
-      { name: "cat", role: "dimension", kind: "string" },
-      { name: "val", role: "measure", kind: "number" },
-    ] }, { chartType: "pie" });
+    const spec = resolve(
+      {
+        rows,
+        fields: [
+          { name: "cat", role: "dimension", kind: "string" },
+          { name: "val", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "pie" },
+    );
     expect(spec.data.length).toBe(6); // A–E + Other
     expect(spec.data.find((r) => r.cat === "Other")?.val).toBe(9);
   });
 
   it("pie: a single small slice is NOT bucketed (matches BI norms)", () => {
     const rows = Array.from({ length: 8 }, (_, i) => ({ cat: `c${i}`, val: 8 - i }));
-    const spec = resolve({ rows, fields: [
-      { name: "cat", role: "dimension", kind: "string" },
-      { name: "val", role: "measure", kind: "number" },
-    ] }, { chartType: "pie" });
+    const spec = resolve(
+      {
+        rows,
+        fields: [
+          { name: "cat", role: "dimension", kind: "string" },
+          { name: "val", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "pie" },
+    );
     expect(spec.data.length).toBe(8);
     expect(spec.data.some((r) => r.cat === "Other")).toBe(false);
   });
@@ -383,7 +415,10 @@ describe("resolve() — edge cases", () => {
     };
     expect(resolve(many, { chartType: "bar" }).horizontal).toBe(true);
     const few: ChartData = {
-      rows: [{ name: "a", revenue: 1 }, { name: "b", revenue: 2 }],
+      rows: [
+        { name: "a", revenue: 1 },
+        { name: "b", revenue: 2 },
+      ],
       fields: [
         { name: "name", role: "dimension", kind: "string" },
         { name: "revenue", role: "measure", kind: "number" },
@@ -396,10 +431,16 @@ describe("resolve() — edge cases", () => {
 describe("resolve() — high-cardinality guardrails", () => {
   it("caps a high-cardinality bar to the top 30 by value (drops the tail, with a note)", () => {
     const rows = Array.from({ length: 50 }, (_, i) => ({ item: `item ${i}`, value: i + 1 }));
-    const spec = resolve({ rows, fields: [
-      { name: "item", role: "dimension", kind: "string" },
-      { name: "value", role: "measure", kind: "number" },
-    ] }, { chartType: "bar" });
+    const spec = resolve(
+      {
+        rows,
+        fields: [
+          { name: "item", role: "dimension", kind: "string" },
+          { name: "value", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "bar" },
+    );
     expect(spec.data.length).toBe(30);
     expect(Math.min(...spec.data.map((r) => Number(r.value)))).toBe(21); // kept the largest 30 (21..50)
     expect(spec.notes?.some((n) => /top 30 of 50/.test(n))).toBe(true);
@@ -407,11 +448,18 @@ describe("resolve() — high-cardinality guardrails", () => {
 
   it("caps high-cardinality pivot series, folding the rest into an 'Other' series", () => {
     const rows = Array.from({ length: 20 }, (_, s) => ({ month: "2026-01-01", grp: `g${s}`, val: s + 1 }));
-    const spec = resolve({ encode: { x: "month", series: "grp" }, rows, fields: [
-      { name: "month", role: "time", kind: "time", granularity: "month" },
-      { name: "grp", role: "dimension", kind: "string" },
-      { name: "val", role: "measure", kind: "number" },
-    ] }, { chartType: "bar" });
+    const spec = resolve(
+      {
+        encode: { x: "month", series: "grp" },
+        rows,
+        fields: [
+          { name: "month", role: "time", kind: "time", granularity: "month" },
+          { name: "grp", role: "dimension", kind: "string" },
+          { name: "val", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "bar" },
+    );
     expect(spec.series.length).toBe(12); // 11 kept + Other
     expect(spec.series.at(-1)?.key).toBe("Other");
     expect(spec.data[0]!.Other).toBe(45); // sum of the 9 smallest series (1..9)
@@ -441,10 +489,16 @@ describe("resolve() — high-cardinality guardrails", () => {
       day: new Date(Date.UTC(2020, 0, 1 + i)).toISOString().slice(0, 10),
       v: i,
     }));
-    const spec = resolve({ rows, fields: [
-      { name: "day", role: "time", kind: "time" },
-      { name: "v", role: "measure", kind: "number" },
-    ] }, { chartType: "line" });
+    const spec = resolve(
+      {
+        rows,
+        fields: [
+          { name: "day", role: "time", kind: "time" },
+          { name: "v", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "line" },
+    );
     expect(spec.data.length).toBeLessThanOrEqual(2001);
     expect(spec.data.length).toBeGreaterThan(1000);
     expect(spec.data.at(-1)?.v).toBe(4999); // last point preserved (range intact)
@@ -456,10 +510,16 @@ describe("resolve() — high-cardinality guardrails", () => {
       day: new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10),
       revenue: i + 1,
     }));
-    const spec = resolve({ rows, fields: [
-      { name: "day", role: "time", kind: "time" },
-      { name: "revenue", role: "measure", kind: "number" },
-    ] }, { chartType: "line" });
+    const spec = resolve(
+      {
+        rows,
+        fields: [
+          { name: "day", role: "time", kind: "time" },
+          { name: "revenue", role: "measure", kind: "number" },
+        ],
+      },
+      { chartType: "line" },
+    );
     expect(spec.data.length).toBe(60); // all points kept
   });
 });
@@ -583,7 +643,10 @@ describe("resolve() — P0.2 numeric grouping column", () => {
 
     it("never renders a same-axis combo horizontal (even when asked)", () => {
       const rows = Array.from({ length: 12 }, (_, i) => ({ name: `Cat ${i}`, revenue: 100 - i, target: 90 }));
-      const spec = resolve({ rows, encode: { y: ["revenue", "target"], line: "target" } }, { chartType: "bar", horizontal: true });
+      const spec = resolve(
+        { rows, encode: { y: ["revenue", "target"], line: "target" } },
+        { chartType: "bar", horizontal: true },
+      );
       expect(spec.series.find((s) => s.key === "target")?.type).toBe("line");
       expect(spec.horizontal).toBe(false); // combo forced vertical
     });
@@ -612,13 +675,24 @@ describe("resolve() — P0.2 numeric grouping column", () => {
     });
 
     it("throws an instructive error when there aren't two numeric columns", () => {
-      expect(() => resolve({ rows: [{ name: "A", region: "EU" }] }, { chartType: "scatter" })).toThrow(/two numeric|numeric/i);
+      expect(() => resolve({ rows: [{ name: "A", region: "EU" }] }, { chartType: "scatter" })).toThrow(
+        /two numeric|numeric/i,
+      );
     });
   });
 
   describe("funnel", () => {
     it("a stage dimension + a value -> funnel spec (no axes)", () => {
-      const spec = resolve({ rows: [{ stage: "Visitors", users: 12000 }, { stage: "Signups", users: 4200 }, { stage: "Paid", users: 760 }] }, { chartType: "funnel" });
+      const spec = resolve(
+        {
+          rows: [
+            { stage: "Visitors", users: 12000 },
+            { stage: "Signups", users: 4200 },
+            { stage: "Paid", users: 760 },
+          ],
+        },
+        { chartType: "funnel" },
+      );
       expect(spec.chartType).toBe("funnel");
       expect(spec.x).toBe("stage");
       expect(spec.series).toEqual([{ key: "users", label: "Users" }]);
@@ -627,7 +701,16 @@ describe("resolve() — P0.2 numeric grouping column", () => {
     });
 
     it("drops non-positive stages", () => {
-      const spec = resolve({ rows: [{ stage: "A", n: 100 }, { stage: "B", n: 0 }, { stage: "C", n: -5 }] }, { chartType: "funnel" });
+      const spec = resolve(
+        {
+          rows: [
+            { stage: "A", n: 100 },
+            { stage: "B", n: 0 },
+            { stage: "C", n: -5 },
+          ],
+        },
+        { chartType: "funnel" },
+      );
       expect(spec.data.length).toBe(1);
     });
   });
@@ -660,7 +743,9 @@ describe("resolve() — P0.2 numeric grouping column", () => {
     });
 
     it("throws an instructive error when there's no step + value", () => {
-      expect(() => resolve({ rows: [{ onlyText: "x" }, { onlyText: "y" }] }, { chartType: "waterfall" })).toThrow(/waterfall|signed/i);
+      expect(() => resolve({ rows: [{ onlyText: "x" }, { onlyText: "y" }] }, { chartType: "waterfall" })).toThrow(
+        /waterfall|signed/i,
+      );
     });
   });
 });
@@ -675,11 +760,16 @@ describe("resolve() — name-based format inference (raw-rows path)", () => {
     };
     const spec = resolve(data, { chartType: "line" });
     const rateCol = spec.columns?.find((c) => c.key === "completion_rate");
-    expect((spec.yAxis?.format ?? rateCol?.format)).toBe("percent");
+    expect(spec.yAxis?.format ?? rateCol?.format).toBe("percent");
   });
 
   it("a plain numeric column is not formatted as percent", () => {
-    const data: ChartData = { rows: [{ region: "EU", revenue: 100 }, { region: "US", revenue: 250 }] };
+    const data: ChartData = {
+      rows: [
+        { region: "EU", revenue: 100 },
+        { region: "US", revenue: 250 },
+      ],
+    };
     const spec = resolve(data, { chartType: "bar" });
     expect(spec.yAxis?.format).toBeUndefined();
   });
