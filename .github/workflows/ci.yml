@@ -20,14 +20,15 @@ jobs:
 
       - run: pnpm install --no-frozen-lockfile
 
+      # Build first: widget -> core (embeds the widget). typecheck/lint of the widget + examples
+      # resolve `@bonnard/mcp-charts` types from core's built dist, so dist must exist before them.
+      - run: pnpm build
+
       - run: pnpm format:check
 
       - run: pnpm lint
 
       - run: pnpm typecheck
-
-      # Builds the widget first, then core (embeds the widget) — fails loudly if the widget is missing.
-      - run: pnpm build
 
       - run: pnpm test
 
