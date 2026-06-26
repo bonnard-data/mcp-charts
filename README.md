@@ -4,8 +4,15 @@ Add beautiful, agent-ready visualizations to your MCP server in a few lines.
 
 Your MCP server already has data. `@bonnard/mcp-charts` gives an agent a `visualize`
 tool and renders the result as an interactive chart inside Claude and ChatGPT, with no
-UI code from you. You connect your data (SQL, a semantic layer, or an ORM); we handle the
-tool, the chart, the cross-host widget, and the theming.
+UI code from you. Connect your data over Postgres, BigQuery, Snowflake, Databricks, DuckDB,
+a semantic layer, or any `runSql` callback; we handle the tool, the chart, the cross-host
+widget, and the theming.
+
+## Install
+
+```bash
+npm install @bonnard/mcp-charts
+```
 
 ```ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -28,7 +35,7 @@ addCharts(server, {
   (a sandboxed `ui://` widget) in Claude or ChatGPT — one widget, both hosts.
 
 ## Status
-Early development. Not yet published.
+Published on npm as `@bonnard/mcp-charts` (v0.1.x). Active development; the API may change before 1.0.
 
 ## Repo layout
 - `packages/core` — the SDK (`@bonnard/mcp-charts`): the tool surface, the `resolve()`
