@@ -14,6 +14,8 @@
 
 `@bonnard/mcp-charts` adds a `visualize` tool plus an embedded chart widget to any MCP server. The agent writes SQL, your database returns the rows, and the result renders as an interactive chart inside the host (Claude, ChatGPT, and other MCP Apps clients). You write no frontend code.
 
+> Pre-1.0: the API may change before a 1.0 release.
+
 ## Install
 
 ```bash
