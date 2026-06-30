@@ -76,7 +76,7 @@ Bundled for Postgres, BigQuery, Snowflake, Databricks, and DuckDB. Each driver i
 - Website: https://bonnard.dev
 - Docs: https://docs.bonnard.dev/mcp-charts/getting-started
 - Issues: https://github.com/bonnard-data/mcp-charts/issues
-- Contact: [alex@bonnard.dev](mailto:alex@bonnard.dev)
+- Contact: [pierre@bonnard.dev](mailto:pierre@bonnard.dev)
 
 ## Repo layout
 
