@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  Built by <a href="https://bonnard.dev">Bonnard</a> &middot; <a href="https://bonnard.dev">bonnard.dev</a> &middot; <a href="https://docs.bonnard.dev/mcp-charts/getting-started">Docs</a>
+</p>
+
+<p align="center">
   <img src="https://raw.githubusercontent.com/bonnard-data/mcp-charts/main/assets/hero-bubble.png" alt="A chart rendered inside Claude from a visualize tool call" width="820">
 </p>
 
@@ -69,9 +73,10 @@ Bundled for Postgres, BigQuery, Snowflake, Databricks, and DuckDB. Each driver i
 
 ## Links
 
-- Docs: https://docs.bonnard.dev/mcp-charts/getting-started
 - Website: https://bonnard.dev
+- Docs: https://docs.bonnard.dev/mcp-charts/getting-started
 - Issues: https://github.com/bonnard-data/mcp-charts/issues
+- Contact: [pierre@bonnard.dev](mailto:pierre@bonnard.dev)
 
 ## Repo layout
 
