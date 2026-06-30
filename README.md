@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Built by <a href="https://bonnard.dev">Bonnard</a> &middot; <a href="https://bonnard.dev">bonnard.dev</a> &middot; <a href="https://docs.bonnard.dev/mcp-charts/getting-started">Docs</a>
+  Built by <a href="https://bonnard.dev">Bonnard</a> &middot; <a href="https://docs.bonnard.dev/mcp-charts/getting-started">Docs</a>
 </p>
 
 <p align="center">
