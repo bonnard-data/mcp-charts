@@ -23,6 +23,22 @@ const MIN_PIE_FRACTION = 0.02; // share cap: slices under 2% of the total fold i
 const MAX_BARS = 30; // categorical bars beyond this: keep the top N by value, drop the tail
 const MAX_SERIES = 12; // distinct series beyond this: keep the top N by total, fold rest into "Other"
 const MAX_POINTS = 2000; // line/area points beyond this: stride-downsample to bound the payload
+const FRACTION_MAX = 1.5; // percent columns: max |value| at or below this reads as a 0-1 fraction
+
+// Decide the percent scale ONCE per column. Guessing per value at render time flipped scale
+// mid-series (0.98 -> 98% next to 1.02 -> 1%); the column's magnitude decides instead.
+function isFractionScale(rows: Record<string, unknown>[], keys: string[]): boolean {
+  let max = -Infinity;
+  for (const r of rows) {
+    for (const k of keys) {
+      const v = r[k];
+      if (v == null) continue;
+      const n = Number(v);
+      if (Number.isFinite(n) && Math.abs(n) > max) max = Math.abs(n);
+    }
+  }
+  return max >= 0 && max <= FRACTION_MAX;
+}
 
 export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   const encode = data.encode ?? {};
@@ -107,6 +123,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
         key: f.name,
         label: f.label ?? f.name,
         ...(f.format && { format: f.format }),
+        ...(f.format === "percent" && { fraction: isFractionScale(rows, [f.name]) }),
         ...(f.currency && { currency: f.currency }),
         ...(f.granularity && { granularity: f.granularity }),
       })),
@@ -268,8 +285,15 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   const yAxis = {
     ...(series.length === 1 && { label: series[0]!.label }),
     ...(firstMeasure?.format && { format: firstMeasure.format }),
+    ...(firstMeasure?.format === "percent" && {
+      fraction: isFractionScale(
+        rows,
+        series.filter((s) => s.axis !== "right").map((s) => s.key),
+      ),
+    }),
     ...(firstMeasure?.currency && { currency: firstMeasure.currency }),
   };
+  if (yAxisRight?.format === "percent") yAxisRight.fraction = isFractionScale(rows, y2Names);
   const xAxis = {
     ...(xField && { label: xField.label }),
     ...(xField?.granularity && { granularity: xField.granularity }),
@@ -295,7 +319,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // layout becomes a meaningless diagonal), so never render a combo horizontal — even if asked.
   if (hasComboLine) horizontal = false;
 
-  const columns = buildColumns(x, xField, series, byName);
+  const columns = buildColumns(x, xField, series, byName, rows);
 
   // Reference lines: an average computed from the primary (left) series, and/or a target value.
   const reference: ReferenceLine[] = [];
@@ -545,6 +569,7 @@ function buildColumns(
   xField: FieldMeta | undefined,
   series: SeriesSpec[],
   byName: Map<string, FieldMeta>,
+  rows: Record<string, unknown>[],
 ): ColumnSpec[] {
   const cols: ColumnSpec[] = [];
   if (x) {
@@ -560,6 +585,7 @@ function buildColumns(
       key: s.key,
       label: s.label,
       ...(f?.format && { format: f.format }),
+      ...(f?.format === "percent" && { fraction: isFractionScale(rows, [s.key]) }),
       ...(f?.currency && { currency: f.currency }),
     });
   }

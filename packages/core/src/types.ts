@@ -73,6 +73,9 @@ export interface AxisSpec {
   currency?: string;
   /** x-axis only: values are numeric, so line/area render on a linear (value) scale, not categories. */
   numeric?: boolean;
+  /** percent only: values are 0-1 fractions (renderer scales by 100). Decided once per column
+   *  at resolve time so a series crossing 1.0 doesn't flip scale between adjacent values. */
+  fraction?: boolean;
 }
 
 export interface ColumnSpec {
@@ -81,6 +84,8 @@ export interface ColumnSpec {
   format?: FieldFormat;
   granularity?: TimeGranularity;
   currency?: string;
+  /** percent only: values are 0-1 fractions (renderer scales by 100). See AxisSpec.fraction. */
+  fraction?: boolean;
 }
 
 /** A horizontal reference line on the value axis (target, average, threshold). */

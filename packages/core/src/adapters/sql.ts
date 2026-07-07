@@ -76,7 +76,7 @@ export function buildChartData({
   });
   const fields: FieldMeta[] = columns.map((col) => {
     const kind = kindByName.get(col.name)!;
-    const format = kind === "number" ? formatHint(col.name) : undefined;
+    const format = kind === "number" ? formatHint(col.name, out.map((r) => r[col.name])) : undefined;
     // Granularity from the normalized values (all first-of-month -> month); name-hint fallback.
     const granularity =
       kind === "time"

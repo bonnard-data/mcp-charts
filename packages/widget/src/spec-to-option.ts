@@ -50,8 +50,8 @@ export function specToOption(spec: ChartSpec): ECOption {
 // Point data is packed as [x, y, size|null, label|null] so the tooltip/symbolSize can read by index.
 function scatterOption(spec: ChartSpec): ECOption {
   const yKey = spec.series[0]?.key ?? "";
-  const xFmt = (v: unknown) => fmt(v, spec.xAxis?.format, spec.xAxis?.currency);
-  const yFmt = (v: unknown) => fmt(v, spec.yAxis?.format, spec.yAxis?.currency);
+  const xFmt = (v: unknown) => fmt(v, spec.xAxis?.format, spec.xAxis?.currency, spec.xAxis?.fraction);
+  const yFmt = (v: unknown) => fmt(v, spec.yAxis?.format, spec.yAxis?.currency, spec.yAxis?.fraction);
   const sizeKey = spec.size;
   const labelKey = spec.pointLabel;
   const sizes = sizeKey ? spec.data.map((r) => Number(r[sizeKey]) || 0) : [];
@@ -107,8 +107,9 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
   const pct = !dual && spec.stacking === "stacked100";
   const yfmt: FieldFormat | undefined = pct ? "percent" : spec.yAxis?.format;
   const cur = spec.yAxis?.currency;
-  const leftFmt = (v: unknown) => fmt(v, yfmt, cur);
-  const rightFmt = (v: unknown) => fmt(v, spec.yAxisRight?.format, spec.yAxisRight?.currency);
+  // stacked100 values are computed as 0-100 shares, so never fraction-scale them.
+  const leftFmt = (v: unknown) => fmt(v, yfmt, cur, pct ? false : spec.yAxis?.fraction);
+  const rightFmt = (v: unknown) => fmt(v, spec.yAxisRight?.format, spec.yAxisRight?.currency, spec.yAxisRight?.fraction);
   // Numeric x on a line/area -> a linear (value) axis with [x,y] point data, so irregular
   // spacing is honest. Bars stay categorical; stacking keeps the category path too.
   const numericX = kind === "line" && !stacked && !!spec.xAxis?.numeric;
@@ -205,7 +206,7 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
               const body = arr
                 .map(
                   (p: TipParam) =>
-                    `${p.marker}${esc(p.seriesName)}: ${fmt(p.data?.raw, spec.yAxis?.format, cur)} (${p.value}%)`,
+                    `${p.marker}${esc(p.seriesName)}: ${fmt(p.data?.raw, spec.yAxis?.format, cur, spec.yAxis?.fraction)} (${p.value}%)`,
                 )
                 .join("<br/>");
               return `${head}<br/>${body}`;
@@ -223,7 +224,7 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
 function funnelOption(spec: ChartSpec): ECOption {
   const key = spec.series[0]?.key ?? "";
   const col = spec.columns?.find((c) => c.key === key);
-  const vfmt = (v: unknown) => fmt(v, col?.format, col?.currency);
+  const vfmt = (v: unknown) => fmt(v, col?.format, col?.currency, col?.fraction);
   const data = spec.data.map((r) => ({ name: String(r[spec.x]), value: Number(r[key]) || 0 }));
   return {
     tooltip: {
@@ -257,7 +258,7 @@ function funnelOption(spec: ChartSpec): ECOption {
 function waterfallOption(spec: ChartSpec): ECOption {
   const key = spec.series[0]?.key ?? "";
   const col = spec.columns?.find((c) => c.key === key);
-  const vf = (v: unknown) => fmt(v, col?.format, col?.currency);
+  const vf = (v: unknown) => fmt(v, col?.format, col?.currency, col?.fraction);
   const totals = new Set(spec.totals ?? []);
   const cats = spec.data.map((r) => String(r[spec.x]));
   const INCREASE = "#10b981",
@@ -334,7 +335,7 @@ function pieOption(spec: ChartSpec): ECOption {
     legend: { bottom: 0, type: "scroll", icon: "roundRect" },
     tooltip: {
       trigger: "item",
-      formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${fmt(p.value, yfmt, cur)} (${p.percent}%)`,
+      formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${fmt(p.value, yfmt, cur, spec.yAxis?.fraction)} (${p.percent}%)`,
     },
     series: [
       {

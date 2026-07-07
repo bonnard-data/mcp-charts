@@ -854,4 +854,46 @@ describe("resolve() — name-based format inference (raw-rows path)", () => {
     const spec = resolve(data, { chartType: "bar" });
     expect(spec.yAxis?.format).toBe("currency");
   });
+
+  it("does not percent-format a *_rate column whose values aren't fractions (exchange_rate)", () => {
+    const data: ChartData = {
+      rows: [
+        { month: "2026-01", exchange_rate: 1.08 },
+        { month: "2026-02", exchange_rate: 1.12 },
+      ],
+    };
+    const spec = resolve(data, { chartType: "line" });
+    expect(spec.yAxis?.format).toBeUndefined(); // 1.08 must never render as 108%
+    expect(spec.columns?.find((c) => c.key === "exchange_rate")?.format).toBeUndefined();
+  });
+});
+
+describe("resolve() — percent scale decided once per column", () => {
+  it("flags a 0-1 fraction series crossing 1.0 as fraction (no per-value scale flips)", () => {
+    const data: ChartData = {
+      rows: [
+        { month: "2026-01-01", sla: 0.98 },
+        { month: "2026-02-01", sla: 1.02 },
+      ],
+      fields: [
+        { name: "month", role: "time", kind: "time", granularity: "month" },
+        { name: "sla", role: "measure", kind: "number", format: "percent" },
+      ],
+    };
+    const spec = resolve(data, { chartType: "line" });
+    expect(spec.yAxis?.fraction).toBe(true); // 0.98 -> 98%, 1.02 -> 102% (not 1%)
+    expect(spec.columns?.find((c) => c.key === "sla")?.fraction).toBe(true);
+  });
+
+  it("flags an already-percent series (values in 0-100) as non-fraction", () => {
+    const data: ChartData = {
+      rows: [
+        { month: "2026-01-01", pct_complete: 42 },
+        { month: "2026-02-01", pct_complete: 55 },
+      ],
+    };
+    const spec = resolve(data, { chartType: "line" });
+    expect(spec.yAxis?.format).toBe("percent"); // pct name hint
+    expect(spec.yAxis?.fraction).toBe(false);
+  });
 });

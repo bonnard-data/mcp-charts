@@ -96,11 +96,21 @@ export function titleCase(s: string): string {
 // format/granularity. Centralized here so the adapter path (buildChartData) and the raw-rows path
 // (inferFields) apply identical rules.
 
-// A numeric column whose name reads as a rate/ratio renders as a percent. Currency is deliberately
-// NOT guessed from names (the code is unknowable) — declare it. camelCase is normalized to snake.
-export function formatHint(name: string): FieldFormat | undefined {
+// A numeric column whose name reads as a percentage renders as a percent. pct/percent/percentage
+// names are unambiguous; rate/ratio names are not (exchange_rate at 1.08, hourly_rate at 45), so
+// they only hold when no value contradicts a 0-1 fraction reading. Currency is deliberately NOT
+// guessed from names (the code is unknowable) — declare it. camelCase is normalized to snake.
+export function formatHint(name: string, values?: unknown[]): FieldFormat | undefined {
   const n = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
-  if (/(^|_)(rate|pct|percent|percentage|ratio)(_|$)/.test(n)) return "percent";
+  if (/(^|_)(pct|percent|percentage)(_|$)/.test(n)) return "percent";
+  if (/(^|_)(rate|ratio)(_|$)/.test(n)) {
+    for (const v of values ?? []) {
+      if (v == null) continue;
+      const x = Number(v);
+      if (Number.isFinite(x) && Math.abs(x) > 1) return undefined;
+    }
+    return "percent";
+  }
   return undefined;
 }
 
@@ -136,7 +146,7 @@ export function inferFields(data: ChartData): FieldMeta[] {
         ? (sniffGranularityFromValues(rows.map((r) => r[name])) ?? granularityHint(name))
         : undefined);
     // declared > name-hint (rate -> percent); only for numeric columns
-    const format = d?.format ?? (kind === "number" ? formatHint(name) : undefined);
+    const format = d?.format ?? (kind === "number" ? formatHint(name, rows.map((r) => r[name])) : undefined);
     return {
       name,
       kind,

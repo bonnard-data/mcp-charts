@@ -9,6 +9,12 @@ describe("fmt — percent auto-detect", () => {
   it("treats a value >1 as an already-computed percent", () => {
     expect(fmt(42, "percent")).toBe("42.0%"); // not 4200%
   });
+  it("honors the per-column fraction flag so a series crossing 1.0 stays consistent", () => {
+    expect(fmt(0.98, "percent", undefined, true)).toBe("98.0%");
+    expect(fmt(1.02, "percent", undefined, true)).toBe("102.0%"); // not 1.0%
+    expect(fmt(0.5, "percent", undefined, false)).toBe("0.5%"); // already-percent column
+    expect(fmt(42, "percent", undefined, false)).toBe("42.0%");
+  });
 });
 
 describe("fmt — currency compaction", () => {

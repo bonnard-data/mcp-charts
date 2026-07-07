@@ -8,10 +8,12 @@ export const esc = (s: unknown) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 // Format a measure value by its declared format (currency/percent/number), abbreviating K/M.
-export function fmt(v: unknown, f?: Format, currency?: string): string {
+// `fraction` is the per-column percent scale decided at resolve time (0-1 fraction vs already-
+// percent); when a spec doesn't carry it, fall back to the per-value guess.
+export function fmt(v: unknown, f?: Format, currency?: string, fraction?: boolean): string {
   const n = Number(v);
   if (v == null || Number.isNaN(n)) return v == null ? "" : String(v);
-  if (f === "percent") return `${(Math.abs(n) <= 1 ? n * 100 : n).toFixed(1)}%`;
+  if (f === "percent") return `${((fraction ?? Math.abs(n) <= 1) ? n * 100 : n).toFixed(1)}%`;
   const abbr = (x: number) =>
     Math.abs(x) >= 1e6
       ? `${(x / 1e6).toFixed(1)}M`
