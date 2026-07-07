@@ -59,13 +59,27 @@ export function sniffGranularityFromValues(values: unknown[]): TimeGranularity |
   return "day";
 }
 
+// One value can lie (a text column whose first value is "2024" or "2025-01-15" would type the
+// whole column time/number), so sample several and require consensus; disagreement -> string.
+const KIND_SAMPLE = 20;
 export function sniffKind(rows: Record<string, unknown>[], name: string): FieldKind {
-  const sample = rows.find((r) => r[name] != null)?.[name];
-  if (sample == null) return "string";
-  if (typeof sample === "number" || typeof sample === "bigint") return "number";
-  if (typeof sample === "boolean") return "boolean";
-  if (typeof sample === "string" && sniffTimeGranularity(sample) !== null) return "time";
-  return "string";
+  const kindOf = (v: unknown): FieldKind => {
+    if (typeof v === "number" || typeof v === "bigint") return "number";
+    if (typeof v === "boolean") return "boolean";
+    if (typeof v === "string" && sniffTimeGranularity(v) !== null) return "time";
+    return "string";
+  };
+  let kind: FieldKind | undefined;
+  let seen = 0;
+  for (const r of rows) {
+    const v = r[name];
+    if (v == null) continue;
+    const k = kindOf(v);
+    if (kind === undefined) kind = k;
+    else if (k !== kind) return "string";
+    if (++seen >= KIND_SAMPLE) break;
+  }
+  return kind ?? "string";
 }
 
 export function roleFromKind(kind: FieldKind): FieldRole {

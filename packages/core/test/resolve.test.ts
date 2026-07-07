@@ -117,6 +117,22 @@ describe("resolve()", () => {
     expect(spec.chartType).toBe("bar");
   });
 
+  it("does not type a text column as time/number off one date-shaped first value", () => {
+    // Regression: sniffKind trusted only the first non-null value, so "2024" typed the
+    // whole id/label column as a time axis.
+    const data: ChartData = {
+      rows: [
+        { label: "2024", n: 1 },
+        { label: "kickoff", n: 2 },
+        { label: "retro", n: 3 },
+      ],
+    };
+    const spec = resolve(data, { chartType: "bar" });
+    expect(spec.x).toBe("label");
+    expect(spec.xAxis?.granularity).toBeUndefined(); // string dimension, not a year axis
+    expect(spec.data.map((r) => r.label)).toEqual(["2024", "kickoff", "retro"]); // source order kept
+  });
+
   it("single value, no breakdown -> table", () => {
     const data: ChartData = {
       rows: [{ total: 51800 }],
