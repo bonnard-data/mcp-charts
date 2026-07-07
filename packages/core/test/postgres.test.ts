@@ -51,6 +51,13 @@ describe("postgresToChartData — typing from real Postgres OIDs", () => {
     expect(data.rows[0]!.d).toBe("2026-03-01");
   });
 
+  it("date_trunc('month') infers month granularity from the values, not 'day'", async () => {
+    const data = await run(
+      "SELECT date_trunc('month', month)::date AS bucket, SUM(revenue) AS revenue FROM orders GROUP BY 1 ORDER BY 1",
+    );
+    expect(data.fields!.find((f) => f.name === "bucket")?.granularity).toBe("month");
+  });
+
   it("non-scalar columns (array/json) stringify so charts stay scalar", async () => {
     const data = await run("SELECT ARRAY[1,2,3] AS tags, '{\"a\":1}'::json AS meta");
     assertChartDataShape(data);

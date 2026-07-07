@@ -6,7 +6,7 @@
 // Connection, auth, read-only enforcement, cost caps and timeouts belong to the caller's database
 // role; assertReadOnlySql is a cheap extra check on LLM-authored SQL, not a substitute for one.
 import type { ChartData, FieldKind, FieldMeta } from "../types.js";
-import { roleFromKind, titleCase, formatHint, granularityHint } from "../resolve/infer.js";
+import { roleFromKind, titleCase, formatHint, granularityHint, sniffGranularityFromValues } from "../resolve/infer.js";
 
 /** A source column: its name + the engine's declared type, in whatever shape the driver reports. */
 export interface SourceColumn {
@@ -68,10 +68,20 @@ export function buildChartData({
   mapKind,
   normalizeCell = defaultNormalizeCell,
 }: BuildChartDataOptions): ChartData {
+  const kindByName = new Map(columns.map((col) => [col.name, mapKind(col.type, col)]));
+  const out = rows.map((row) => {
+    const r: Record<string, unknown> = {};
+    for (const col of columns) r[col.name] = normalizeCell(row[col.name], kindByName.get(col.name)!, col);
+    return r;
+  });
   const fields: FieldMeta[] = columns.map((col) => {
-    const kind = mapKind(col.type, col);
+    const kind = kindByName.get(col.name)!;
     const format = kind === "number" ? formatHint(col.name) : undefined;
-    const granularity = kind === "time" ? granularityHint(col.name) : undefined;
+    // Granularity from the normalized values (all first-of-month -> month); name-hint fallback.
+    const granularity =
+      kind === "time"
+        ? (sniffGranularityFromValues(out.map((r) => r[col.name])) ?? granularityHint(col.name))
+        : undefined;
     return {
       name: col.name,
       kind,
@@ -80,12 +90,6 @@ export function buildChartData({
       ...(format && { format }),
       ...(granularity && { granularity }),
     };
-  });
-  const kindByName = new Map(fields.map((f) => [f.name, f.kind!]));
-  const out = rows.map((row) => {
-    const r: Record<string, unknown> = {};
-    for (const col of columns) r[col.name] = normalizeCell(row[col.name], kindByName.get(col.name)!, col);
-    return r;
   });
   return { rows: out, fields };
 }

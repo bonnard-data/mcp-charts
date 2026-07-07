@@ -665,6 +665,27 @@ describe("resolve() — P0.2 numeric grouping column", () => {
       expect(spec.chartType).toBe("line"); // a time axis auto-detects to line
     });
 
+    it("infers month granularity from date_trunc-style full dates (all first-of-month)", () => {
+      // date_trunc('month', ...) yields full dates; shape-sniffing one value said "day",
+      // which null-filled a monthly series into ~30x disconnected dots.
+      const rows = Array.from({ length: 6 }, (_, i) => ({
+        month: `2025-${String(i + 1).padStart(2, "0")}-01`,
+        revenue: 100 + i,
+      }));
+      const spec = resolve({ rows }, { chartType: "line" });
+      expect(spec.xAxis?.granularity).toBe("month");
+      expect(spec.data.length).toBe(6); // no day-fill explosion
+    });
+
+    it("infers year / quarter / week / day granularity from the value pattern", () => {
+      const gran = (dates: string[]) =>
+        resolve({ rows: dates.map((d, i) => ({ ts: d, v: i + 1 })) }, { chartType: "line" }).xAxis?.granularity;
+      expect(gran(["2023-01-01", "2024-01-01", "2025-01-01"])).toBe("year");
+      expect(gran(["2025-01-01", "2025-04-01", "2025-07-01"])).toBe("quarter");
+      expect(gran(["2025-01-06", "2025-01-13", "2025-01-20"])).toBe("week"); // all Mondays
+      expect(gran(["2025-01-05", "2025-01-06", "2025-01-07"])).toBe("day");
+    });
+
     it("does NOT auto-horizontal a time-bucketed bar, even with many buckets", () => {
       const spec = resolve({ rows: monthlyRows }, { chartType: "bar" }); // 18 months > threshold
       expect(spec.horizontal).toBeUndefined(); // time x stays vertical

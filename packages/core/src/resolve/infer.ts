@@ -21,6 +21,44 @@ export function sniffTimeGranularity(value: unknown): TimeGranularity | null {
   return null;
 }
 
+// Granularity from the actual values. date_trunc('month'|'quarter'|'year'|'week') yields FULL
+// dates, so a single value's shape reads as "day" and a monthly series gets ~30x null-filled
+// into disconnected dots. Scan the distinct dates instead: all Jan 1 -> year, all first-of-
+// quarter spaced like quarters -> quarter, all first-of-month -> month, all the same weekday ->
+// week, else day. Period strings (YYYY-MM, YYYY-Qn, ...) state their own granularity; mixed or
+// unparseable values bail out (null).
+const DAY_MS = 86_400_000;
+export function sniffGranularityFromValues(values: unknown[]): TimeGranularity | null {
+  const seen = new Set<string>();
+  const dates: Date[] = [];
+  for (const v of values) {
+    if (v == null) continue;
+    const g = sniffTimeGranularity(v);
+    if (g === null) return null;
+    if (g !== "day") return g;
+    const day = String(v).slice(0, 10);
+    if (seen.has(day)) continue;
+    seen.add(day);
+    const d = new Date(`${day}T00:00:00.000Z`);
+    if (isNaN(d.getTime())) return null;
+    dates.push(d);
+  }
+  if (dates.length === 0) return null;
+  if (dates.length === 1) return "day"; // one distinct date: no periodicity to read
+  const times = dates.map((d) => d.getTime()).sort((a, b) => a - b);
+  let minGap = Infinity;
+  for (let i = 1; i < times.length; i++) minGap = Math.min(minGap, times[i]! - times[i - 1]!);
+  const all = (p: (d: Date) => boolean) => dates.every(p);
+  if (all((d) => d.getUTCDate() === 1)) {
+    if (all((d) => d.getUTCMonth() === 0)) return "year";
+    // First-of-quarter alone also matches monthly data (Jan, Feb, ...); the gap disambiguates.
+    if (all((d) => d.getUTCMonth() % 3 === 0) && minGap > 31 * DAY_MS) return "quarter";
+    return "month";
+  }
+  if (all((d) => d.getUTCDay() === dates[0]!.getUTCDay())) return "week";
+  return "day";
+}
+
 export function sniffKind(rows: Record<string, unknown>[], name: string): FieldKind {
   const sample = rows.find((r) => r[name] != null)?.[name];
   if (sample == null) return "string";
@@ -76,12 +114,12 @@ export function inferFields(data: ChartData): FieldMeta[] {
     const d = declared.get(name);
     const kind: FieldKind = d?.kind ?? sniffKind(rows, name);
     const role: FieldRole = d?.role ?? roleFromKind(kind);
-    // Time columns with no declared granularity: infer it from the value shape (YYYY-MM -> month).
-    // declared > value-sniff > name-hint
+    // Time columns with no declared granularity: infer it from the values (YYYY-MM -> month,
+    // all first-of-month full dates -> month). declared > value-scan > name-hint
     const granularity =
       d?.granularity ??
       (kind === "time"
-        ? (sniffTimeGranularity(rows.find((r) => r[name] != null)?.[name]) ?? granularityHint(name))
+        ? (sniffGranularityFromValues(rows.map((r) => r[name])) ?? granularityHint(name))
         : undefined);
     // declared > name-hint (rate -> percent); only for numeric columns
     const format = d?.format ?? (kind === "number" ? formatHint(name) : undefined);
