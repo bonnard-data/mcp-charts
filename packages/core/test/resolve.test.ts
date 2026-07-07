@@ -374,6 +374,41 @@ describe("resolve() — edge cases", () => {
     expect(feb.revenue).toBeNull(); // a gap, not 0
   });
 
+  it("keeps rows whose timestamps are not midnight-aligned when filling time gaps", () => {
+    // Regression: dateKey included the hour, so a 14:30 bucket never matched the midnight
+    // sequence and every real row was silently replaced by a null gap row.
+    const rows = Array.from({ length: 10 }, (_, i) => ({
+      day: `2025-01-${String(i + 5).padStart(2, "0")} 14:30:00`,
+      revenue: (i + 1) * 10,
+    }));
+    const data: ChartData = {
+      rows,
+      fields: [
+        { name: "day", role: "time", kind: "time", granularity: "day" },
+        { name: "revenue", role: "measure", kind: "number" },
+      ],
+    };
+    const spec = resolve(data, { chartType: "line" });
+    expect(spec.data.length).toBe(10);
+    expect(spec.data.map((r) => r.revenue)).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
+  });
+
+  it("fills gaps around non-midnight timestamps without dropping the real rows", () => {
+    const data: ChartData = {
+      rows: [
+        { day: "2025-01-05 14:30:00", revenue: 10 },
+        { day: "2025-01-07 09:15:00", revenue: 30 }, // Jan 6 missing
+      ],
+      fields: [
+        { name: "day", role: "time", kind: "time", granularity: "day" },
+        { name: "revenue", role: "measure", kind: "number" },
+      ],
+    };
+    const spec = resolve(data, { chartType: "line" });
+    expect(spec.data.length).toBe(3);
+    expect(spec.data.map((r) => r.revenue)).toEqual([10, null, 30]);
+  });
+
   it("labels a null/empty dimension value as '(No value)'", () => {
     const data: ChartData = {
       rows: [
