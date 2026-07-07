@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ChartContext, ChartData, ChartSpec, ChartType, Encode } from "./types.js";
 import { resolve } from "./resolve/resolve.js";
-import { validateRowsShape, assertPlottedScalar } from "./validate.js";
+import { validateRowsShape, assertPlottedScalar, warnUntypedColumns } from "./validate.js";
 import { WIDGET_HTML } from "./generated/widget-html.js";
 
 const ALL_CHART_TYPES: ChartType[] = ["line", "bar", "area", "pie", "scatter", "funnel", "waterfall", "table"];
@@ -109,6 +109,9 @@ function emptyResult(title?: string) {
   };
 }
 
+// Dedupe integration warnings so a mis-wired runSql logs each issue once, not per call.
+const warnedIntegration = new Set<string>();
+
 // Register the ui:// widget resource once per server (addCharts may be called repeatedly).
 const widgetRegistered = new WeakSet<object>();
 function registerWidgetResource(server: McpServer): void {
@@ -169,6 +172,12 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
       try {
         const data = await runSql(String(args.sql), ctx);
         validateRowsShape(data.rows); // fail loud on a wrong shape (not array / not objects)
+        // Nudge the integrator (once) if a column arrived untyped and looks mis-inferrable.
+        for (const w of warnUntypedColumns(data)) {
+          if (warnedIntegration.has(w)) continue;
+          warnedIntegration.add(w);
+          console.warn(`[mcp-charts] ${w}`);
+        }
         const title = args.title as string | undefined;
         if (data.rows.length === 0) return emptyResult(title); // friendly "no rows" state
         if (args.encode) data.encode = { ...(data.encode ?? {}), ...(args.encode as Encode) };

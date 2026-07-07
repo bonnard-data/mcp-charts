@@ -10,16 +10,24 @@ tool, the chart, the cross-host widget, and the theming.
 ```ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { addCharts } from "@bonnard/mcp-charts";
+import { postgresToChartData } from "@bonnard/mcp-charts/postgres";
 
 const server = new McpServer({ name: "acme", version: "1.0.0" });
 
 addCharts(server, {
-  // your data, your connection — Bonnard never touches the database
+  // your data, your connection — Bonnard never touches the database.
+  // The adapter maps driver types to chart kinds and normalizes cells (a Postgres
+  // NUMERIC/BIGINT arrives as a string; return raw rows and it charts as a category).
   async runSql(sql) {
-    return pool.query(sql); // -> { rows, fields? }
+    const res = await pool.query(sql);
+    return postgresToChartData(res.rows, res.fields);
   },
 });
 ```
+
+Adapters ship for `postgres`, `bigquery`, `snowflake`, `databricks`, and `duckdb`. For an
+engine without one, build typed `ChartData` with `buildChartData` (or declare `fields` yourself)
+so numeric/temporal columns aren't left to be inferred from raw values.
 
 ## How it works
 - The agent calls `visualize` with a query (SQL / semantic query / chart params).

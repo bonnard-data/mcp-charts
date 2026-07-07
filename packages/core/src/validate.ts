@@ -3,9 +3,10 @@
 // chart renderer below us fails SILENTLY on a bad shape, we turn "invisible blank chart" into
 // a clear, agent-correctable error. Cheap: structural check + sampled scalar check on the
 // columns we actually plot. Never scans large result sets; never rejects carried-but-unplotted columns.
-import type { ChartSpec } from "./types.js";
+import type { ChartData, ChartSpec } from "./types.js";
 
 const SCALAR_TYPES = new Set(["string", "number", "boolean", "bigint"]);
+const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
 
 function isScalar(v: unknown): boolean {
   return v == null || SCALAR_TYPES.has(typeof v) || v instanceof Date;
@@ -27,6 +28,32 @@ export function validateRowsShape(rows: unknown): asserts rows is Record<string,
         `If your driver returns arrays, map each row to an object first.`,
     );
   }
+}
+
+// A column typed only by inference (no declared `kind`) whose values are numbers-stored-as-strings
+// or driver wrapper objects is the classic integration footgun: resolve() then charts numbers as
+// categories, or blanks the chart on objects. This is a wiring mistake in the caller's runSql (a
+// SQL driver that string-encodes numerics, or hands back Date/wrapper objects), not bad data, so it
+// warns the developer rather than throwing. Silent when the caller declared `fields` (kinds win).
+export function warnUntypedColumns(data: ChartData, sample = 50): string[] {
+  const declared = new Set((data.fields ?? []).filter((f) => f.kind).map((f) => f.name));
+  const rows = data.rows.slice(0, sample);
+  const cols = rows[0] ? Object.keys(rows[0]) : [];
+  const out: string[] = [];
+  for (const c of cols) {
+    if (declared.has(c)) continue;
+    const vals = rows.map((r) => r[c]).filter((v) => v != null);
+    if (vals.length === 0) continue;
+    // Skip all-4-digit columns: a bare year is a legitimate string/number ambiguity we must not force.
+    const numericStrings = vals.every((v) => typeof v === "string" && NUMERIC_STRING.test(v));
+    const yearish = vals.every((v) => /^\d{4}$/.test(String(v)));
+    if (numericStrings && !yearish) {
+      out.push(`Column "${c}" holds numbers stored as strings; declare its kind or normalize the cells, else it charts as a category.`);
+    } else if (vals.some((v) => typeof v === "object" && !(v instanceof Date))) {
+      out.push(`Column "${c}" holds objects (a driver-wrapped value?); normalize to a scalar or declare its fields.`);
+    }
+  }
+  return out;
 }
 
 /** Precise check: every column we actually plot (x + series) must hold scalar values. Sampled. */
