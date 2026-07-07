@@ -868,6 +868,34 @@ describe("resolve() — name-based format inference (raw-rows path)", () => {
   });
 });
 
+describe("resolve() — ChartData.notes passthrough", () => {
+  const fields: ChartData["fields"] = [
+    { name: "region", role: "dimension", kind: "string" },
+    { name: "revenue", role: "measure", kind: "number" },
+  ];
+  const rows = [
+    { region: "EU", revenue: 10 },
+    { region: "US", revenue: 20 },
+  ];
+
+  it("merges data-source notes (e.g. a truncation warning) into ChartSpec.notes", () => {
+    const spec = resolve({ rows, fields, notes: ["Result truncated at 5000 rows."] }, { chartType: "bar" });
+    expect(spec.notes).toEqual(["Result truncated at 5000 rows."]);
+  });
+
+  it("keeps source notes ahead of resolve's own notes", () => {
+    const dup = [...rows, { region: "EU", revenue: 5 }]; // triggers the summed-duplicates note
+    const spec = resolve({ rows: dup, fields, notes: ["Result truncated."] }, { chartType: "bar" });
+    expect(spec.notes?.[0]).toBe("Result truncated.");
+    expect(spec.notes?.some((n) => /Summed/.test(n))).toBe(true);
+  });
+
+  it("carries notes on the table branch too", () => {
+    const spec = resolve({ rows, fields, notes: ["Result truncated."] }, { chartType: "table" });
+    expect(spec.notes).toEqual(["Result truncated."]);
+  });
+});
+
 describe("resolve() — percent scale decided once per column", () => {
   it("flags a 0-1 fraction series crossing 1.0 as fraction (no per-value scale flips)", () => {
     const data: ChartData = {

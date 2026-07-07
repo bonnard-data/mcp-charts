@@ -80,11 +80,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   });
 
   // Scatter/bubble: own branch — two measures as a point cloud, no aggregation/pivot/sort.
-  if (isScatter) return resolveScatter(rows, fields, encode, opts);
+  if (isScatter) return withNotes(resolveScatter(rows, fields, encode, opts), data.notes);
   // Funnel: stages (a dimension) + a value, no axes — own branch.
-  if (opts.chartType === "funnel") return resolveFunnel(rows, fields, encode, opts);
+  if (opts.chartType === "funnel") return withNotes(resolveFunnel(rows, fields, encode, opts), data.notes);
   // Waterfall: ordered steps with signed deltas; first/last (or a marked column) are totals.
-  if (opts.chartType === "waterfall") return resolveWaterfall(rows, fields, encode, opts);
+  if (opts.chartType === "waterfall") return withNotes(resolveWaterfall(rows, fields, encode, opts), data.notes);
 
   // --- x-axis: encode wins, then first time field, then first dimension ---
   const timeField = fields.find((f) => f.role === "time");
@@ -118,6 +118,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
       x: "",
       series: [],
       legend: false,
+      ...(data.notes?.length && { notes: data.notes }),
       ...(opts.title && { title: opts.title }),
       columns: fields.map((f) => ({
         key: f.name,
@@ -151,7 +152,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     encode.series ??
     (timeField && dimField && dimField.name !== x && dimField.kind === "string" ? dimField.name : undefined);
 
-  const notes: string[] = [];
+  const notes: string[] = [...(data.notes ?? [])];
   let series: SeriesSpec[];
   let yAxisRight: AxisSpec | undefined;
   if (pivotDim && yNames.length === 1) {
@@ -352,6 +353,12 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     columns,
     ...(notes.length > 0 && { notes }),
   };
+}
+
+// Prepend data-source notes (e.g. a truncation warning) to a spec from a branch that doesn't
+// build its own notes list.
+function withNotes(spec: ChartSpec, notes?: string[]): ChartSpec {
+  return notes?.length ? { ...spec, notes: [...notes, ...(spec.notes ?? [])] } : spec;
 }
 
 // Scatter/bubble: x and y are measures (one row = one point). No aggregation, pivot, or sort — that

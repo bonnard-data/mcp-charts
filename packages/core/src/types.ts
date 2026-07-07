@@ -40,6 +40,9 @@ export interface ChartData {
   rows: Record<string, unknown>[];
   fields?: FieldMeta[];
   encode?: Encode;
+  /** Data-source advisories (e.g. "result truncated at the row cap") that resolve() merges
+   *  into ChartSpec.notes so they surface on the chart. */
+  notes?: string[];
 }
 
 /** Context passed to data callbacks — extensible bag so the signature never breaks. */
