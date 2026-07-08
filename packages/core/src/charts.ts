@@ -159,6 +159,27 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
       title: "Visualize",
       description,
       inputSchema,
+      // Schema-back structuredContent: some hosts only forward it to the widget when the tool
+      // declares an outputSchema. Permissive (nested objects as open records) so it never rejects a spec.
+      outputSchema: {
+        chartType: z.string(),
+        data: z.array(z.record(z.string(), z.unknown())),
+        x: z.string(),
+        series: z.array(z.record(z.string(), z.unknown())),
+        legend: z.boolean(),
+        xAxis: z.record(z.string(), z.unknown()).optional(),
+        yAxis: z.record(z.string(), z.unknown()).optional(),
+        yAxisRight: z.record(z.string(), z.unknown()).optional(),
+        stacking: z.string().optional(),
+        horizontal: z.boolean().optional(),
+        title: z.string().optional(),
+        columns: z.array(z.record(z.string(), z.unknown())).optional(),
+        reference: z.array(z.record(z.string(), z.unknown())).optional(),
+        size: z.string().optional(),
+        pointLabel: z.string().optional(),
+        totals: z.array(z.string()).optional(),
+        notes: z.array(z.string()).optional(),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
       // Link the tool to its widget. `ui.resourceUri` is the MCP Apps standard (Claude,
       // Cursor, Inspector); `openai/outputTemplate` is the ChatGPT Apps SDK alias.
