@@ -179,14 +179,19 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
   // Reference lines (target / average): a dashed markLine on the value axis, drawn once via series[0].
   if (spec.reference?.length && series[0]) {
     const axisKey = horizontal ? "xAxis" : "yAxis";
+    // Alternate each label between the two ends of its line so close reference values
+    // (e.g. target vs average) don't overlap each other. Labels stay horizontal.
+    const endTop = horizontal ? "end" : "insideEndTop";
+    const startTop = horizontal ? "start" : "insideStartTop";
     (series[0] as Record<string, unknown>).markLine = {
       symbol: "none",
       lineStyle: { type: "dashed" },
-      // Keep the label horizontal (ECharts rotates it along a vertical line by default). Place it
-      // inside the right edge for value-on-y charts (avoids clipping); at the line end for
-      // horizontal bars (value-on-x), where it reads cleanly below the vertical line.
-      label: { position: horizontal ? "end" : "insideEndTop", rotate: 0, formatter: "{b}" },
-      data: spec.reference.map((r) => ({ [axisKey]: r.value, name: `${r.label}: ${leftFmt(r.value)}` })),
+      label: { rotate: 0, formatter: "{b}", fontSize: 11 },
+      data: spec.reference.map((r, i) => ({
+        [axisKey]: r.value,
+        name: `${r.label}: ${leftFmt(r.value)}`,
+        label: { position: i % 2 ? startTop : endTop },
+      })),
     };
   }
 

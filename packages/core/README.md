@@ -1,38 +1,77 @@
-# @bonnard/mcp-charts
+<h1 align="center">@bonnard/mcp-charts</h1>
 
-Add agent-ready, interactive charts to your MCP server in a few lines. `addCharts` registers a
-`visualize` tool plus an embedded chart widget; your agent writes SQL, you run it, and the result
-renders as an interactive chart inside the MCP host (Claude, ChatGPT, and other MCP Apps clients).
+<p align="center">Interactive charts for your MCP server, in a few lines.</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@bonnard/mcp-charts"><img src="https://img.shields.io/npm/v/@bonnard/mcp-charts" alt="npm version"></a>
+  <a href="https://github.com/bonnard-data/mcp-charts/actions/workflows/ci.yml"><img src="https://github.com/bonnard-data/mcp-charts/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/@bonnard/mcp-charts" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bonnard-data/mcp-charts/main/assets/hero-bubble.png" alt="A chart rendered inside Claude from a visualize tool call" width="820">
+</p>
+
+`@bonnard/mcp-charts` adds a `visualize` tool plus an embedded chart widget to any MCP server. The agent writes SQL, your database returns the rows, and the result renders as an interactive chart inside the host (Claude, ChatGPT, and other MCP Apps clients). You write no frontend code.
+
+> Pre-1.0: the API may change before a 1.0 release.
+
+## Install
 
 ```bash
 npm install @bonnard/mcp-charts
 ```
 
+## Quickstart
+
+Call `addCharts` on your existing MCP server and give it a read-only query callback:
+
 ```ts
 import { addCharts } from "@bonnard/mcp-charts";
+import { postgresRunSql } from "@bonnard/mcp-charts/postgres";
 
 addCharts(server, {
-  // your read-only query callback — return { rows } (and optionally typed `fields`)
-  runSql: async (sql) => ({ rows: await db.query(sql) }),
-  discovery: { toolName: "explore_schema" }, // your schema-discovery tool
+  runSql: postgresRunSql(pool), // maps pg column types to chart field kinds
+  discovery: { toolName: "explore_schema" }, // tell the agent to discover tables first
 });
 ```
 
-You own the database connection; the SDK only turns the rows into a chart. Bring your own SQL, or
-use a bundled warehouse adapter (BigQuery, Postgres, DuckDB, Snowflake, Databricks):
+That registers a `visualize` tool and a `ui://bonnard/chart` widget resource. The agent calls it with SQL; the rows render as a chart in the host, with a text fallback for non-widget clients.
+
+## Why
+
+- **Grounded in real data.** Charts render the rows your query returned, not numbers the model typed into a tool call. No hallucinated figures.
+- **A few lines, no frontend.** One function, one widget that works across every MCP Apps host. You don't maintain per-client rendering code.
+- **Interactive, not static images.** Tooltips, legends, and axis formatting, native to the client.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bonnard-data/mcp-charts/main/assets/interactive-waterfall.png" alt="Interactive waterfall chart with a hover tooltip, rendered in Claude" width="820">
+</p>
+
+## Chart types
+
+Eight types, chosen automatically from the shape of your data or set explicitly: `bar`, `line`, `area`, `pie`, `scatter`, `funnel`, `waterfall`, `table`. Plus bar variants (stacked, grouped, 100% stacked, horizontal), dual-axis combos, bubble sizing, and reference lines. See the [chart types reference](https://docs.bonnard.dev/mcp-charts/chart-types).
+
+## Warehouse adapters
+
+Skip writing `runSql` by hand. Each adapter wraps your driver and maps native column types to chart roles (dimension, measure, time):
 
 ```ts
 import { postgresRunSql } from "@bonnard/mcp-charts/postgres";
 addCharts(server, { runSql: postgresRunSql(pool) });
 ```
 
-## Read-only access
+Bundled for Postgres, BigQuery, Snowflake, Databricks, and DuckDB. Each driver is an optional peer dependency, installed only if you import its subpath. See [warehouse adapters](https://docs.bonnard.dev/mcp-charts/adapters).
 
-The agent writes the SQL, so run it through a **read-only database role** — that is the security
-boundary. The bundled adapters also apply a lightweight SELECT-only check (`assertReadOnlySql`), but
-treat that as a guardrail, not a substitute for least-privilege credentials.
+## Security
 
-Full docs and examples: https://github.com/bonnard-data/mcp-charts
+`visualize` executes agent-written SQL against your database. Treat it as untrusted input: connect `runSql` to a **read-only, least-privilege** role scoped to the data you want exposed. Your database permissions are the security boundary; the SDK does not sandbox queries. See [Security](https://docs.bonnard.dev/mcp-charts/getting-started#security).
+
+## Links
+
+- Docs: https://docs.bonnard.dev/mcp-charts/getting-started
+- Website: https://bonnard.dev
+- Issues: https://github.com/bonnard-data/mcp-charts/issues
 
 ## License
 
