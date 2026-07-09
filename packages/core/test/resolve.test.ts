@@ -104,6 +104,28 @@ describe("resolve()", () => {
     expect(jan).toMatchObject({ EU: 10, US: 20 });
   });
 
+  it("pivots a category named like a prototype key without mis-summing (constructor/toString)", () => {
+    const data: ChartData = {
+      rows: [
+        { month: "2026-01-01", plan: "constructor", revenue: 10 },
+        { month: "2026-01-01", plan: "toString", revenue: 20 },
+        { month: "2026-02-01", plan: "constructor", revenue: 30 },
+      ],
+      fields: [
+        { name: "month", role: "time", kind: "time", granularity: "month" },
+        { name: "plan", role: "dimension", kind: "string" },
+        { name: "revenue", role: "measure", kind: "number" },
+      ],
+    };
+    const spec = resolve(data, { chartType: "line" });
+    expect(spec.series.map((s) => s.key).sort()).toEqual(["constructor", "toString"]);
+    const jan = spec.data.find((r) => String(r.month).startsWith("2026-01"))!;
+    expect(jan["constructor"]).toBe(10);
+    expect(jan["toString"]).toBe(20);
+    // `in` would treat every inherited key as a collision and emit a bogus "Summed rows" note.
+    expect((spec.notes ?? []).some((n) => /Summed .* shared the same/.test(n))).toBe(false);
+  });
+
   it("infers types from raw rows when fields are omitted", () => {
     const data: ChartData = {
       rows: [

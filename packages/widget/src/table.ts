@@ -9,7 +9,10 @@ export function renderTable(spec: ChartSpec): string {
     : Object.keys(spec.data[0] ?? {}).map((k) => ({ key: k, label: k }));
   const head = cols.map((c) => `<th>${esc(c.label)}</th>`).join("");
   const rows = spec.data
-    .map((row) => `<tr>${cols.map((c) => `<td>${esc(fmt(row[c.key], c.format, c.currency, c.fraction))}</td>`).join("")}</tr>`)
+    .map(
+      (row) =>
+        `<tr>${cols.map((c) => `<td>${esc(fmt(row[c.key], c.format, c.currency, c.fraction, false))}</td>`).join("")}</tr>`,
+    )
     .join("");
   return `<table class="tbl"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }

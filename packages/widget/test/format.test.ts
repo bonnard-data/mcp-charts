@@ -24,6 +24,20 @@ describe("fmt — currency compaction", () => {
   });
 });
 
+describe("fmt — abbreviate=false (tables want exact numbers)", () => {
+  it("shows the full number with separators, not K/M", () => {
+    expect(fmt(2_400_000, undefined, undefined, undefined, false)).toBe("2,400,000");
+    expect(fmt(1_234_567.5, undefined, undefined, undefined, false)).toBe("1,234,567.5");
+  });
+  it("keeps the currency symbol but not the abbreviation", () => {
+    expect(fmt(2_400_000, "currency", "USD", undefined, false)).toBe("$2,400,000");
+  });
+  it("still abbreviates by default (charts/axes unchanged)", () => {
+    expect(fmt(1_234_567.5)).toBe("1.2M"); // non-integer abbreviates
+    expect(fmt(2_400_000, "currency", "USD")).toBe("$2.4M"); // currency abbreviates
+  });
+});
+
 describe("fmtX — time labels by granularity", () => {
   it("formats an ISO date as a short month/year, in UTC (no off-by-one)", () => {
     expect(fmtX("2026-04-01", "month")).toBe("Apr 26");

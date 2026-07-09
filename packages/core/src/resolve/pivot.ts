@@ -33,7 +33,9 @@ export function pivotData(
     const pivotValue = raw == null || raw === "" ? "(No value)" : String(raw);
     if (!groups.has(xValue)) groups.set(xValue, { [xKey]: row[xKey] });
     const group = groups.get(xValue)!;
-    if (pivotValue in group) {
+    // hasOwn, not `in`: a category literally named "constructor"/"toString" would otherwise
+    // match an inherited prototype key and be mis-summed.
+    if (Object.hasOwn(group, pivotValue)) {
       collapsed++;
       group[pivotValue] = (Number(group[pivotValue]) || 0) + (Number(row[valueKey]) || 0);
     } else {

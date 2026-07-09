@@ -14,4 +14,10 @@ describe("renderTable", () => {
     const doc = parseHTML(`<div>${html}</div>`).document as unknown as Document;
     expect(doc.querySelectorAll("table.tbl tbody tr").length).toBe(2);
   });
+
+  it("shows exact numbers, not chart-style K/M abbreviations", () => {
+    const html = renderTable(resolveSpec({ rows: [{ label: "A", revenue: 2_400_000 }] }, { chartType: "table" }));
+    expect(html).toContain("2,400,000");
+    expect(html).not.toContain("2.4M");
+  });
 });
