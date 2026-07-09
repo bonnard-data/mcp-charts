@@ -746,6 +746,48 @@ describe("resolve() — P0.2 numeric grouping column", () => {
       expect(spec.size).toBe("aov");
     });
 
+    it("encode.series groups points into one colored series per category", () => {
+      const grouped = [
+        { customer: "Hooli", segment: "Enterprise", orders: 61, revenue: 354000 },
+        { customer: "Globex", segment: "SMB", orders: 18, revenue: 41000 },
+        { customer: "Initech", segment: "Enterprise", orders: 27, revenue: 96000 },
+      ];
+      const spec = resolve(
+        { rows: grouped, encode: { x: "orders", y: "revenue", series: "segment" } },
+        { chartType: "scatter" },
+      );
+      expect(spec.series.map((s) => s.key).sort()).toEqual(["Enterprise", "SMB"]);
+      expect(spec.legend).toBe(true);
+      expect(spec.pointLabel).toBe("customer"); // the label dimension, not the grouping one
+      // each point's y lands in its own group column; x stays shared
+      const hooli = spec.data.find((r) => r.customer === "Hooli")!;
+      expect(hooli.orders).toBe(61);
+      expect(hooli.Enterprise).toBe(354000);
+      expect(hooli.SMB).toBeUndefined();
+    });
+
+    it("ignores a numeric encode.series (a point cloud can't group by a measure)", () => {
+      const spec = resolve({ rows, encode: { x: "orders", y: "revenue", series: "aov" } }, { chartType: "scatter" });
+      expect(spec.series).toEqual([{ key: "revenue", label: "Revenue" }]);
+      expect(spec.legend).toBe(false);
+    });
+
+    it("folds categories beyond the series cap into \"Other\"", () => {
+      const many = Array.from({ length: 15 }, (_, i) => ({
+        customer: `c${i}`,
+        segment: `S${i}`,
+        orders: i + 1,
+        revenue: (i + 1) * 1000,
+      }));
+      const spec = resolve(
+        { rows: many, encode: { x: "orders", y: "revenue", series: "segment" } },
+        { chartType: "scatter" },
+      );
+      expect(spec.series.length).toBe(12); // MAX_SERIES
+      expect(spec.series.some((s) => s.key === "Other")).toBe(true);
+      expect(spec.notes?.some((n) => /Other/.test(n))).toBe(true);
+    });
+
     it("throws an instructive error when there aren't two numeric columns", () => {
       expect(() => resolve({ rows: [{ name: "A", region: "EU" }] }, { chartType: "scatter" })).toThrow(
         /two numeric|numeric/i,

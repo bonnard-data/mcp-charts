@@ -202,3 +202,34 @@ describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {
     expect(html).not.toContain("<img");
   });
 });
+
+describe("specToOption — grouped scatter", () => {
+  const spec = resolveSpec(
+    {
+      rows: [
+        { customer: "Hooli", segment: "Enterprise", orders: 61, revenue: 354000 },
+        { customer: "Globex", segment: "SMB", orders: 18, revenue: 41000 },
+        { customer: "Initech", segment: "Enterprise", orders: 27, revenue: 96000 },
+      ],
+      encode: { x: "orders", y: "revenue", series: "segment" },
+    },
+    { chartType: "scatter" },
+  );
+
+  it("emits one scatter series per group with a legend", () => {
+    const o: any = specToOption(spec);
+    expect(o.series.map((s: any) => s.type)).toEqual(["scatter", "scatter"]);
+    expect(o.series.map((s: any) => s.name).sort()).toEqual(["Enterprise", "SMB"]);
+    expect(o.legend).toBeDefined();
+  });
+
+  it("packs only a group's own points into its series (sparse y skipped)", () => {
+    const o: any = specToOption(spec);
+    const ent = o.series.find((s: any) => s.name === "Enterprise");
+    const smb = o.series.find((s: any) => s.name === "SMB");
+    expect(ent.data.length).toBe(2); // Hooli + Initech
+    expect(smb.data.length).toBe(1); // Globex
+    expect(ent.data[0][0]).toBe(61); // x = orders
+    expect(ent.data[0][1]).toBe(354000); // y = revenue
+  });
+});

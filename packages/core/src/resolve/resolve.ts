@@ -386,19 +386,83 @@ function resolveScatter(
     throw new Error(`A scatter chart needs numeric x and y; "${x}" or "${y}" is not numeric.`);
   }
   const size = encode.size && byName.get(encode.size)?.kind === "number" ? encode.size : undefined;
-  const pointLabel = fields.find((f) => f.role === "dimension")?.name;
 
-  const colMeta = (k: string) => {
-    const f = byName.get(k);
-    return {
-      key: k,
-      label: f?.label ?? k,
-      ...(f?.format && { format: f.format }),
-      ...(f?.currency && { currency: f.currency }),
-    };
+  // encode.series groups points into colored series by a categorical column. A numeric column
+  // makes no sense as a point-cloud grouping, so honor it only when it's a category/text field.
+  const groupField = encode.series ? byName.get(encode.series) : undefined;
+  const groupKey = groupField && groupField.kind !== "number" ? groupField.name : undefined;
+  const pointLabel = fields.find((f) => f.role === "dimension" && f.name !== groupKey)?.name;
+
+  const colMeta = (k: string, f = byName.get(k)) => ({
+    key: k,
+    label: f?.label ?? k,
+    ...(f?.format && { format: f.format }),
+    ...(f?.currency && { currency: f.currency }),
+  });
+  const xAxis: AxisSpec = {
+    ...(xField?.label && { label: xField.label }),
+    ...(xField?.format && { format: xField.format }),
+    ...(xField?.currency && { currency: xField.currency }),
+    numeric: true,
   };
-  const columns = [x, y, ...(size ? [size] : []), ...(pointLabel ? [pointLabel] : [])].map(colMeta);
+  const yAxis: AxisSpec = {
+    ...(yField?.label && { label: yField.label }),
+    ...(yField?.format && { format: yField.format }),
+    ...(yField?.currency && { currency: yField.currency }),
+  };
 
+  if (groupKey) {
+    // Keep the largest groups by point count; fold the rest into "Other" so a high-cardinality
+    // dimension doesn't become an unreadable legend of one-point colors.
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const g = String(r[groupKey] ?? "(No value)");
+      counts.set(g, (counts.get(g) ?? 0) + 1);
+    }
+    const ordered = [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)!);
+    const capped = ordered.length > MAX_SERIES;
+    const kept = new Set(capped ? ordered.slice(0, MAX_SERIES - 1) : ordered);
+    const groupCols = capped ? [...kept, "Other"] : [...kept];
+    // Each point's y lands in its own group column (null elsewhere); x and size stay shared, so
+    // the widget draws one colored series per group off a single point per row.
+    const data = rows.map((r) => {
+      const g = String(r[groupKey] ?? "(No value)");
+      const col = kept.has(g) ? g : "Other";
+      return {
+        [x]: r[x],
+        [col]: r[y],
+        ...(size && { [size]: r[size] }),
+        ...(pointLabel && { [pointLabel]: r[pointLabel] }),
+      };
+    });
+    const notes = capped ? [`Grouped ${ordered.length - kept.size} smaller categories into "Other".`] : [];
+    return {
+      chartType: "scatter",
+      data,
+      x,
+      series: groupCols.map((g) => ({ key: g, label: g })),
+      ...(size && { size }),
+      ...(pointLabel && { pointLabel }),
+      xAxis,
+      yAxis,
+      legend: true,
+      ...(opts.title && { title: opts.title }),
+      ...(notes.length && { notes }),
+      columns: [
+        colMeta(x),
+        ...groupCols.map((g) => ({
+          key: g,
+          label: g,
+          ...(yField?.format && { format: yField.format }),
+          ...(yField?.currency && { currency: yField.currency }),
+        })),
+        ...(size ? [colMeta(size)] : []),
+        ...(pointLabel ? [colMeta(pointLabel)] : []),
+      ],
+    };
+  }
+
+  const columns = [x, y, ...(size ? [size] : []), ...(pointLabel ? [pointLabel] : [])].map((k) => colMeta(k));
   return {
     chartType: "scatter",
     data: rows,
@@ -406,17 +470,8 @@ function resolveScatter(
     series: [{ key: y, label: yField?.label ?? y }],
     ...(size && { size }),
     ...(pointLabel && { pointLabel }),
-    xAxis: {
-      ...(xField?.label && { label: xField.label }),
-      ...(xField?.format && { format: xField.format }),
-      ...(xField?.currency && { currency: xField.currency }),
-      numeric: true,
-    },
-    yAxis: {
-      ...(yField?.label && { label: yField.label }),
-      ...(yField?.format && { format: yField.format }),
-      ...(yField?.currency && { currency: yField.currency }),
-    },
+    xAxis,
+    yAxis,
     legend: false,
     ...(opts.title && { title: opts.title }),
     columns,

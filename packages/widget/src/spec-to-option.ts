@@ -49,32 +49,41 @@ export function specToOption(spec: ChartSpec): ECOption {
 // Scatter / bubble: x and y are both values; an optional size column scales the symbol (bubble).
 // Point data is packed as [x, y, size|null, label|null] so the tooltip/symbolSize can read by index.
 function scatterOption(spec: ChartSpec): ECOption {
-  const yKey = spec.series[0]?.key ?? "";
   const xFmt = (v: unknown) => fmt(v, spec.xAxis?.format, spec.xAxis?.currency, spec.xAxis?.fraction);
   const yFmt = (v: unknown) => fmt(v, spec.yAxis?.format, spec.yAxis?.currency, spec.yAxis?.fraction);
   const sizeKey = spec.size;
   const labelKey = spec.pointLabel;
+  // One series per group when grouped by a category; each series reads its own (sparse) y column.
+  const grouped = spec.series.length > 1;
+  const yName = spec.yAxis?.label ?? (grouped ? "value" : (spec.series[0]?.label ?? "value"));
+  // Global size max across every point so bubble scaling is consistent across groups.
   const sizes = sizeKey ? spec.data.map((r) => Number(r[sizeKey]) || 0) : [];
   const sMax = sizes.length ? Math.max(...sizes) : 0;
 
-  const data = spec.data.map((r) => [
-    Number(r[spec.x]),
-    Number(r[yKey]),
-    sizeKey ? Number(r[sizeKey]) || 0 : null,
-    labelKey ? r[labelKey] : null,
-  ]);
+  const symbolSize = sizeKey ? (d: number[]) => 10 + (sMax ? (d[2]! / sMax) * 38 : 0) : 11;
+  const points = (yKey: string) =>
+    spec.data
+      .filter((r) => r[yKey] != null && r[yKey] !== "")
+      .map((r) => [
+        Number(r[spec.x]),
+        Number(r[yKey]),
+        sizeKey ? Number(r[sizeKey]) || 0 : null,
+        labelKey ? r[labelKey] : null,
+      ]);
 
   return {
-    grid: { left: 8, right: 24, top: 16, bottom: 32, containLabel: true },
+    grid: { left: 8, right: 24, top: 16, bottom: grouped ? 48 : 32, containLabel: true },
+    ...(grouped && { legend: { bottom: 0, type: "scroll" as const } }),
     tooltip: {
       trigger: "item",
       formatter: (p: TipParam) => {
         const d = p.data as unknown[];
+        const grp = grouped ? `${esc(p.seriesName)}<br/>` : "";
         const head = d[3] != null ? `${esc(d[3])}<br/>` : "";
         const sizeLine = sizeKey
           ? `<br/>${esc(spec.columns?.find((c) => c.key === sizeKey)?.label ?? sizeKey)}: ${fmt(d[2])}`
           : "";
-        return `${head}${esc(spec.xAxis?.label ?? spec.x)}: ${xFmt(d[0])}<br/>${esc(spec.series[0]?.label ?? yKey)}: ${yFmt(d[1])}${sizeLine}`;
+        return `${grp}${head}${esc(spec.xAxis?.label ?? spec.x)}: ${xFmt(d[0])}<br/>${esc(yName)}: ${yFmt(d[1])}${sizeLine}`;
       },
     },
     xAxis: {
@@ -88,15 +97,14 @@ function scatterOption(spec: ChartSpec): ECOption {
       type: "value",
       axisLabel: { formatter: (v: number) => yFmt(v) },
     },
-    series: [
-      {
-        type: "scatter",
-        symbolSize: sizeKey ? (d: number[]) => 10 + (sMax ? (d[2]! / sMax) * 38 : 0) : 11,
-        itemStyle: { opacity: 0.8 },
-        emphasis: { focus: "self" as const },
-        data,
-      },
-    ] as ECOption["series"],
+    series: spec.series.map((s) => ({
+      name: s.label,
+      type: "scatter",
+      symbolSize,
+      itemStyle: { opacity: 0.8 },
+      emphasis: { focus: "self" as const },
+      data: points(s.key),
+    })) as ECOption["series"],
   };
 }
 
