@@ -149,6 +149,21 @@ describe("specToOption — stacked100", () => {
     const all = o.series.flatMap((s: any) => s.data);
     expect(all.every((d: any) => typeof d === "object" && d.value <= 100 && "raw" in d)).toBe(true);
   });
+
+  it("excludes a combo line from the 100% total so real shares aren't shrunk", () => {
+    const spec = resolveSpec(
+      {
+        rows: [{ month: "2025-01", a: 30, b: 10, target: 1000 }],
+        encode: { x: "month", y: ["a", "b"], line: "target" },
+      },
+      { chartType: "bar", stacking: "stacked100" },
+    );
+    const o: any = specToOption(spec);
+    // series order is [a, b, target(line)]; a + b own 100% between them, the large
+    // target line must not dilute it.
+    expect(o.series[0].data[0].value).toBe(75); // a: 30 / (30+10)
+    expect(o.series[1].data[0].value).toBe(25); // b: 10 / (30+10)
+  });
 });
 
 describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {

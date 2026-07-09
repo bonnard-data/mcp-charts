@@ -722,6 +722,34 @@ describe("resolve() — P0.2 numeric grouping column", () => {
       expect(spec.series.find((s) => s.key === "target")?.type).toBe("line");
       expect(spec.horizontal).toBe(false); // combo forced vertical
     });
+
+    describe("encode.line is additive (x / y / line each name their own column)", () => {
+      const rows = [
+        { month: "2025-01", revenue: 100, forecast: 120 },
+        { month: "2025-02", revenue: 140, forecast: 130 },
+      ];
+
+      it("plots a line measure that wasn't listed in y", () => {
+        const spec = resolve({ rows, encode: { x: "month", y: "revenue", line: "forecast" } }, { chartType: "bar" });
+        expect(spec.series.map((s) => s.key)).toEqual(["revenue", "forecast"]);
+        expect(spec.series.find((s) => s.key === "forecast")?.type).toBe("line");
+        expect(spec.series.find((s) => s.key === "revenue")?.type).toBeUndefined(); // stays a bar
+      });
+
+      it("does not duplicate a line measure already in y (just tags it)", () => {
+        const spec = resolve(
+          { rows, encode: { x: "month", y: ["revenue", "forecast"], line: "forecast" } },
+          { chartType: "bar" },
+        );
+        expect(spec.series.filter((s) => s.key === "forecast").length).toBe(1);
+        expect(spec.series.find((s) => s.key === "forecast")?.type).toBe("line");
+      });
+
+      it("ignores a line name that isn't a real column (no phantom series)", () => {
+        const spec = resolve({ rows, encode: { x: "month", y: "revenue", line: "nope" } }, { chartType: "bar" });
+        expect(spec.series.map((s) => s.key)).toEqual(["revenue"]);
+      });
+    });
   });
 
   describe("scatter / bubble", () => {

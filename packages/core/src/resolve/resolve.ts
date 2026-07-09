@@ -189,6 +189,12 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
       label: byName.get(key)?.label ?? key,
       ...(lineNames.includes(key) && { type: "line" as const }),
     }));
+    // A line measure that wasn't also listed in y is still plotted (as a line), same as y2 —
+    // x / y / line each name their own column. Skip unknown columns so a typo draws nothing.
+    for (const key of lineNames) {
+      if (yNames.includes(key) || y2Names.includes(key) || !byName.has(key)) continue;
+      series.push({ key, label: byName.get(key)?.label ?? key, type: "line" });
+    }
     for (const key of y2Names) series.push({ key, label: byName.get(key)?.label ?? key, axis: "right" });
     if (y2Names.length > 0) {
       const f = byName.get(y2Names[0]!);

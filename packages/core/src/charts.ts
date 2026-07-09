@@ -58,7 +58,7 @@ function presentationInput(allow: ChartType[]): Record<string, z.ZodTypeAny> {
           .union([z.string(), z.array(z.string())])
           .optional()
           .describe(
-            "Measure(s) to draw as a line instead of bars on the same axis (e.g. actual bars + target/forecast/moving-average line). Compute that measure in SQL, include it in y, and name it here.",
+            "Measure(s) to draw as a line instead of bars on the same axis (e.g. actual bars + target/forecast/moving-average line). Compute that measure in SQL, select it, and name it here.",
           ),
         size: z
           .string()

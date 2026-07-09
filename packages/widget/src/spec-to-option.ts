@@ -122,7 +122,10 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
   // spacing is honest. Bars stay categorical; stacking keeps the category path too.
   const numericX = kind === "line" && !stacked && !!spec.xAxis?.numeric;
   const cats = spec.data.map((r) => fmtX(r[spec.x], spec.xAxis?.granularity));
-  const totals = spec.data.map((r) => spec.series.reduce((a, s) => a + (Number(r[s.key]) || 0), 0));
+  // A combo line (e.g. a target/forecast) is an overlay, not part of the stack, so it must not
+  // count toward the 100% total or it would shrink every real share.
+  const stackKeys = spec.series.filter((s) => s.type !== "line").map((s) => s.key);
+  const totals = spec.data.map((r) => stackKeys.reduce((a, k) => a + (Number(r[k]) || 0), 0));
 
   const series = spec.series.map((s) => {
     const onRight = s.axis === "right";
