@@ -45,6 +45,23 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   const fields = inferFields(data);
   const byName = new Map(fields.map((f) => [f.name, f]));
 
+  // Transparency: never silently drop an encode mapping. Flag any encode column that isn't in the
+  // result (a typo or stale name) so the agent can fix its next call; we still render what we can.
+  const encodeRefs = (v?: string | string[]) => (v == null ? [] : Array.isArray(v) ? v : [v]);
+  const unknownCols = [
+    ...new Set(
+      [encode.x, ...encodeRefs(encode.y), encode.series, ...encodeRefs(encode.y2), ...encodeRefs(encode.line), encode.size].filter(
+        (c): c is string => !!c && !byName.has(c),
+      ),
+    ),
+  ];
+  if (unknownCols.length) {
+    data.notes = [
+      `Ignored unknown encode column${unknownCols.length > 1 ? "s" : ""} ${unknownCols.map((c) => `"${c}"`).join(", ")}; available: ${fields.map((f) => f.name).join(", ")}.`,
+      ...(data.notes ?? []),
+    ];
+  }
+
   // Scatter/bubble: x AND y are measures, one row = one point. Skip the dimension/aggregate path
   // entirely (aggregating would collapse the cloud) — handled by its own branch below.
   const isScatter = opts.chartType === "scatter";
@@ -163,6 +180,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
       notes.push(
         `Summed ${result.collapsed} row(s) that shared the same ${x} + ${pivotDim} — the data looked unaggregated.`,
       );
+    // The pivot path can't also carry a right-axis measure; say so instead of dropping it silently.
+    if (y2Names.length > 0)
+      notes.push(
+        `Secondary-axis measure(s) ${y2Names.map((n) => `"${n}"`).join(", ")} were dropped because the chart is split into series by ${pivotDim}.`,
+      );
     // Too many series = an indistinguishable color soup. Keep the largest by total, fold the
     // rest into one "Other" series (stacking is part-to-whole, so the total must be preserved).
     if (series.length > MAX_SERIES) {
@@ -213,8 +235,15 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
         series.map((s) => s.key),
       );
       rows = agg.rows;
-      if (agg.collapsed > 0)
+      if (agg.collapsed > 0) {
         notes.push(`Summed ${agg.collapsed} row(s) that shared the same ${x} — the data looked unaggregated.`);
+        // Summing is right for counts, wrong for rates/ratios — flag it so the agent can pre-aggregate.
+        const rateCols = series.filter((s) => byName.get(s.key)?.format === "percent").map((s) => s.key);
+        if (rateCols.length)
+          notes.push(
+            `${rateCols.map((c) => `"${c}"`).join(", ")} looks like a rate; summing rates is usually wrong — compute SUM(numerator)/SUM(denominator) in SQL instead.`,
+          );
+      }
     }
   }
 
@@ -557,6 +586,10 @@ function resolveWaterfall(
   const totals = markerCol
     ? rows.filter((r) => TOTAL_RE.test(String(r[markerCol.name]))).map((r) => String(r[dim]))
     : [String(rows[0]![dim]), String(rows[rows.length - 1]![dim])];
+  // Say when we guessed: a pure-delta input has no totals, so defaulting first/last would be wrong.
+  const notes = markerCol
+    ? []
+    : ["No totals column found, so the first and last rows are treated as the opening and closing totals. Mark a column (e.g. type = total) to change this."];
 
   const valField = byName.get(value);
   const colMeta = (k: string) => {
@@ -574,6 +607,7 @@ function resolveWaterfall(
     x: dim,
     series: [{ key: value, label: valField?.label ?? value }],
     ...(totals.length > 0 && { totals: [...new Set(totals)] }),
+    ...(notes.length && { notes }),
     yAxis: {
       ...(valField?.label && { label: valField.label }),
       ...(valField?.format && { format: valField.format }),

@@ -1017,3 +1017,83 @@ describe("resolve() — percent scale decided once per column", () => {
     expect(spec.yAxis?.fraction).toBe(false);
   });
 });
+
+describe("resolve() — transparency notes (talk back, never silent)", () => {
+  const hasNote = (spec: { notes?: string[] }, re: RegExp) => (spec.notes ?? []).some((n) => re.test(n));
+
+  it("flags an encode column that does not exist instead of dropping it", () => {
+    const spec = resolve(
+      {
+        rows: [
+          { month: "2026-01", revenue: 10 },
+          { month: "2026-02", revenue: 20 },
+        ],
+        encode: { x: "month", series: "regionn" },
+      },
+      { chartType: "bar" },
+    );
+    expect(hasNote(spec, /Ignored unknown encode column "regionn"/)).toBe(true);
+    expect(hasNote(spec, /available:.*month.*revenue/)).toBe(true);
+  });
+
+  it("notes that y2 is dropped when the chart is also split into series", () => {
+    const spec = resolve(
+      {
+        rows: [
+          { month: "2026-01-01", region: "EU", revenue: 10, margin: 0.3 },
+          { month: "2026-01-01", region: "US", revenue: 20, margin: 0.4 },
+          { month: "2026-02-01", region: "EU", revenue: 30, margin: 0.5 },
+        ],
+        fields: [
+          { name: "month", role: "time", kind: "time", granularity: "month" },
+          { name: "region", role: "dimension", kind: "string" },
+          { name: "revenue", role: "measure", kind: "number" },
+          { name: "margin", role: "measure", kind: "number" },
+        ],
+        encode: { series: "region", y2: "margin" },
+      },
+      { chartType: "bar" },
+    );
+    expect(hasNote(spec, /"margin" were dropped because the chart is split into series/)).toBe(true);
+  });
+
+  it("warns when it sums a rate column across duplicate x rows", () => {
+    const spec = resolve(
+      {
+        rows: [
+          { region: "EU", revenue: 10, refund_rate: 0.1 },
+          { region: "EU", revenue: 20, refund_rate: 0.2 },
+          { region: "US", revenue: 5, refund_rate: 0.05 },
+        ],
+      },
+      { chartType: "bar" },
+    );
+    expect(hasNote(spec, /summing rates is usually wrong/)).toBe(true);
+  });
+
+  it("says when a waterfall guessed the opening/closing totals", () => {
+    const guessed = resolve(
+      {
+        rows: [
+          { step: "Open", delta: 100 },
+          { step: "Gain", delta: 50 },
+          { step: "Close", delta: -20 },
+        ],
+      },
+      { chartType: "waterfall" },
+    );
+    expect(hasNote(guessed, /No totals column found/)).toBe(true);
+
+    const marked = resolve(
+      {
+        rows: [
+          { step: "Open", type: "total", delta: 1800 },
+          { step: "Gain", type: "delta", delta: 420 },
+          { step: "Close", type: "total", delta: 2220 },
+        ],
+      },
+      { chartType: "waterfall" },
+    );
+    expect(hasNote(marked, /No totals column found/)).toBe(false);
+  });
+});
