@@ -4,7 +4,12 @@ import type { ChartData } from "../src/types.js";
 
 describe("warnUntypedColumns", () => {
   it("warns when a column is numbers stored as strings and undeclared", () => {
-    const data: ChartData = { rows: [{ month: "2025-01", revenue: "63508.00" }, { month: "2025-02", revenue: "65645.00" }] };
+    const data: ChartData = {
+      rows: [
+        { month: "2025-01", revenue: "63508.00" },
+        { month: "2025-02", revenue: "65645.00" },
+      ],
+    };
     const warnings = warnUntypedColumns(data);
     expect(warnings.some((w) => w.includes('"revenue"') && w.includes("strings"))).toBe(true);
   });
@@ -18,7 +23,12 @@ describe("warnUntypedColumns", () => {
   });
 
   it("does not flag a 4-digit year-like column (ambiguous, must not force)", () => {
-    const data: ChartData = { rows: [{ year: "2024", orders: 10 }, { year: "2025", orders: 12 }] };
+    const data: ChartData = {
+      rows: [
+        { year: "2024", orders: 10 },
+        { year: "2025", orders: 12 },
+      ],
+    };
     expect(warnUntypedColumns(data)).toEqual([]);
   });
 
@@ -31,7 +41,12 @@ describe("warnUntypedColumns", () => {
   });
 
   it("is silent on clean scalar data", () => {
-    const data: ChartData = { rows: [{ region: "EU", revenue: 100 }, { region: "US", revenue: 200 }] };
+    const data: ChartData = {
+      rows: [
+        { region: "EU", revenue: 100 },
+        { region: "US", revenue: 200 },
+      ],
+    };
     expect(warnUntypedColumns(data)).toEqual([]);
   });
 });

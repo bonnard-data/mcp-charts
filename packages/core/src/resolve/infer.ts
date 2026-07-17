@@ -142,11 +142,16 @@ export function inferFields(data: ChartData): FieldMeta[] {
     // all first-of-month full dates -> month). declared > value-scan > name-hint
     const granularity =
       d?.granularity ??
-      (kind === "time"
-        ? (sniffGranularityFromValues(rows.map((r) => r[name])) ?? granularityHint(name))
-        : undefined);
+      (kind === "time" ? (sniffGranularityFromValues(rows.map((r) => r[name])) ?? granularityHint(name)) : undefined);
     // declared > name-hint (rate -> percent); only for numeric columns
-    const format = d?.format ?? (kind === "number" ? formatHint(name, rows.map((r) => r[name])) : undefined);
+    const format =
+      d?.format ??
+      (kind === "number"
+        ? formatHint(
+            name,
+            rows.map((r) => r[name]),
+          )
+        : undefined);
     return {
       name,
       kind,

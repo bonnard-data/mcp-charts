@@ -117,7 +117,8 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
   const cur = spec.yAxis?.currency;
   // stacked100 values are computed as 0-100 shares, so never fraction-scale them.
   const leftFmt = (v: unknown) => fmt(v, yfmt, cur, pct ? false : spec.yAxis?.fraction);
-  const rightFmt = (v: unknown) => fmt(v, spec.yAxisRight?.format, spec.yAxisRight?.currency, spec.yAxisRight?.fraction);
+  const rightFmt = (v: unknown) =>
+    fmt(v, spec.yAxisRight?.format, spec.yAxisRight?.currency, spec.yAxisRight?.fraction);
   // Numeric x on a line/area -> a linear (value) axis with [x,y] point data, so irregular
   // spacing is honest. Bars stay categorical; stacking keeps the category path too.
   const numericX = kind === "line" && !stacked && !!spec.xAxis?.numeric;
@@ -351,7 +352,8 @@ function pieOption(spec: ChartSpec): ECOption {
     legend: { bottom: 0, type: "scroll", icon: "roundRect" },
     tooltip: {
       trigger: "item",
-      formatter: (p: TipParam) => `${p.marker}${esc(p.name)}: ${fmt(p.value, yfmt, cur, spec.yAxis?.fraction)} (${p.percent}%)`,
+      formatter: (p: TipParam) =>
+        `${p.marker}${esc(p.name)}: ${fmt(p.value, yfmt, cur, spec.yAxis?.fraction)} (${p.percent}%)`,
     },
     series: [
       {

@@ -78,6 +78,87 @@
         white-space: pre-wrap;
         word-break: break-word;
       }
+      /* Dashboard: a CSS grid of chart / KPI / text cells. */
+      .dash-title {
+        font-size: 16px;
+        font-weight: 700;
+        margin: 0 0 10px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+        gap: 12px;
+      }
+      .cell {
+        min-width: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      /* Dashboard cells are shorter than the 340px single-chart height. */
+      .cell .ec {
+        height: 240px;
+      }
+      .cell[data-span="2"] {
+        grid-column: span 2;
+      }
+      .cell[data-span="3"] {
+        grid-column: span 3;
+      }
+      .cell[data-span="4"] {
+        grid-column: span 4;
+      }
+      /* Responsive 1-col fallback (iframe viewport width): collapse and neutralize spans. */
+      @media (max-width: 560px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .cell {
+          grid-column: auto !important;
+        }
+      }
+      .kpi .kpi-label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .kpi .kpi-value {
+        font-size: 26px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .kpi .kpi-delta {
+        font-size: 14px;
+        font-weight: 600;
+        margin-left: 8px;
+      }
+      .kpi .kpi-delta.up {
+        color: #16a34a;
+      }
+      .kpi .kpi-delta.down {
+        color: #dc2626;
+      }
+      .kpi .kpi-caption {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .text-block {
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .text-block h3 {
+        font-size: 13px;
+        margin: 0 0 4px;
+      }
+      .unsupported {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .dash-notes {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 10px;
+      }
     </style>
   </head>
   <body>

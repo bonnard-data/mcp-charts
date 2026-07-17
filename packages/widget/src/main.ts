@@ -2,34 +2,37 @@
 // (ext-apps), receives the tool result (a ChartSpec in structuredContent), and renders it
 // with ECharts (SVG renderer) for interactivity. Tables render as HTML.
 import { App } from "@modelcontextprotocol/ext-apps";
-import type { ChartSpec } from "@bonnard/mcp-charts";
+import type { ChartSpec, DashboardSpec } from "@bonnard/mcp-charts";
 import { echarts, themeName } from "./echarts-core.js";
 import { specToOption } from "./spec-to-option.js";
 import { renderTable } from "./table.js";
+import { renderDashboardShell, isChartSpec, isDashboardSpec } from "./dashboard.js";
 import { esc } from "./format.js";
 
 const root = document.getElementById("root")!;
 
 type EChartsInstance = ReturnType<typeof echarts.init>;
-let chart: EChartsInstance | null = null;
-let resizeObserver: ResizeObserver | null = null;
+// A dashboard holds many charts; a single chart holds one. Track them uniformly so teardown
+// disposes every ECharts instance and disconnects every observer.
+let charts: EChartsInstance[] = [];
+let observers: ResizeObserver[] = [];
 let currentTheme: "light" | "dark" = "light";
-let lastSpec: ChartSpec | null = null;
-
-function isSpec(x: unknown): x is ChartSpec {
-  return !!x && typeof x === "object" && Array.isArray((x as ChartSpec).data);
-}
+let lastPayload: ChartSpec | DashboardSpec | null = null;
 
 function teardown() {
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-  chart?.dispose();
-  chart = null;
+  for (const o of observers) o.disconnect();
+  observers = [];
+  for (const c of charts) c.dispose();
+  charts = [];
 }
 
 function paint(structured: unknown, fallbackText?: string) {
-  if (isSpec(structured)) {
-    lastSpec = structured;
+  // Dashboard first: it has `items` and no top-level `data`, so it must be checked before a chart.
+  if (isDashboardSpec(structured)) {
+    lastPayload = structured;
+    renderDashboard(structured);
+  } else if (isChartSpec(structured)) {
+    lastPayload = structured;
     renderChart(structured);
   } else if (fallbackText) {
     teardown();
@@ -38,6 +41,16 @@ function paint(structured: unknown, fallbackText?: string) {
     teardown();
     root.innerHTML = `<div class="empty">Waiting for chart data…</div>`;
   }
+}
+
+// Mount one ECharts instance (with its own ResizeObserver) into a target element.
+function mountChart(el: HTMLElement, spec: ChartSpec) {
+  const c = echarts.init(el, themeName(currentTheme), { renderer: "svg" });
+  c.setOption(specToOption(spec));
+  charts.push(c);
+  const ro = new ResizeObserver(() => c.resize());
+  ro.observe(el);
+  observers.push(ro);
 }
 
 function renderChart(spec: ChartSpec) {
@@ -49,11 +62,23 @@ function renderChart(spec: ChartSpec) {
   }
   const title = spec.title ? `<div class="title">${esc(spec.title)}</div>` : "";
   root.innerHTML = `${title}<div class="ec" id="ec"></div>`;
-  const el = document.getElementById("ec")!;
-  chart = echarts.init(el, themeName(currentTheme), { renderer: "svg" });
-  chart.setOption(specToOption(spec));
-  resizeObserver = new ResizeObserver(() => chart?.resize());
-  resizeObserver.observe(el);
+  mountChart(document.getElementById("ec")!, spec);
+}
+
+function renderDashboard(spec: DashboardSpec) {
+  teardown();
+  root.innerHTML = renderDashboardShell(spec);
+  spec.items.forEach((item, i) => {
+    if (!("spec" in item)) return; // kpi/text cells are already final HTML
+    const el = document.getElementById(`cell-${i}`);
+    if (!el) return;
+    if (item.spec.chartType === "table") {
+      el.innerHTML = renderTable(item.spec);
+      return;
+    }
+    el.innerHTML = `<div class="ec"></div>`;
+    mountChart(el.firstElementChild as HTMLElement, item.spec);
+  });
 }
 
 // ChatGPT's Apps SDK exposes host state on a `window.openai` global (a different dialect from
@@ -75,11 +100,11 @@ function detectTheme(): "light" | "dark" {
 }
 
 function applyTheme(theme: "light" | "dark") {
-  if (theme === currentTheme && chart) return; // no-op if unchanged
+  if (theme === currentTheme && charts.length) return; // no-op if unchanged
   currentTheme = theme;
   document.documentElement.dataset.theme = currentTheme;
-  // ECharts themes are set at init; re-init to repaint with the new palette.
-  if (chart && lastSpec) renderChart(lastSpec);
+  // ECharts themes are set at init; re-render to repaint with the new palette.
+  if (lastPayload) paint(lastPayload);
 }
 const refreshTheme = () => applyTheme(detectTheme());
 
@@ -95,6 +120,16 @@ document.addEventListener("openai:set_globals", (e) => {
   if ((e as CustomEvent).detail?.globals?.theme) refreshTheme();
 });
 window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", refreshTheme);
+
+// Dev harness hook: gated on the `#harness` URL fragment so hosts never activate it (they load the
+// resource without a fragment). Render-only — it just feeds a payload into paint(), which escapes
+// all strings — so shipping it inert in the production bundle is safe.
+if (location.hash === "#harness") {
+  window.addEventListener("message", (e) => {
+    const d = e.data as { type?: string; structuredContent?: unknown; text?: string } | null;
+    if (d?.type === "bonnard:harness-render") paint(d.structuredContent, d.text);
+  });
+}
 
 paint(undefined);
 refreshTheme(); // resolves ChatGPT / OS theme immediately (before any MCP Apps handshake)

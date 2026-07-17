@@ -135,3 +135,50 @@ export interface ResolveOptions {
   /** Add reference lines: an average (computed) and/or a target (a value you pass). */
   reference?: { target?: number; average?: boolean };
 }
+
+// --- DashboardSpec: a grid of items (charts, KPIs, text). A separate render-ready contract
+// from ChartSpec; the widget discriminates on `items` (dashboard) vs `data` (single chart). ---
+
+/** A single KPI tile: a headline number with optional signed delta and caption. */
+export interface KpiTile {
+  type: "kpi";
+  label: string;
+  value: number | string | null;
+  format?: FieldFormat;
+  currency?: string;
+  /** percent: value is a 0-1 fraction (renderer scales by 100). */
+  fraction?: boolean;
+  /** signed change vs prior period, same unit as value. */
+  delta?: number;
+  deltaFraction?: boolean;
+  /** e.g. "vs last month". */
+  caption?: string;
+  span?: number;
+}
+
+/** A block of plain text (escaped by the renderer; markdown is a later decision). */
+export interface TextBlock {
+  type: "text";
+  text: string;
+  heading?: string;
+  span?: number;
+}
+
+/** A dashboard cell holding one resolved chart. Presence of `spec` is the discriminant. */
+export interface ChartCell {
+  type?: "chart";
+  spec: ChartSpec;
+  span?: number;
+}
+
+export type DashboardItem = ChartCell | KpiTile | TextBlock;
+
+/** Output contract for a multi-item dashboard. JSON-serializable; crosses to the widget. */
+export interface DashboardSpec {
+  title?: string;
+  /** default 2; renderer clamps 1..4; item spans clamp to columns. */
+  columns?: number;
+  items: DashboardItem[];
+  /** non-fatal advisories, same posture as ChartSpec.notes. */
+  notes?: string[];
+}

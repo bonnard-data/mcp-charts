@@ -25,6 +25,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./fixtures": {
+      "types": "./dist/fixtures.d.ts",
+      "import": "./dist/fixtures.js"
+    },
     "./bigquery": {
       "types": "./dist/bigquery.d.ts",
       "import": "./dist/bigquery.js"

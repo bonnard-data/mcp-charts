@@ -48,7 +48,9 @@ export function warnUntypedColumns(data: ChartData, sample = 50): string[] {
     const numericStrings = vals.every((v) => typeof v === "string" && NUMERIC_STRING.test(v));
     const yearish = vals.every((v) => /^\d{4}$/.test(String(v)));
     if (numericStrings && !yearish) {
-      out.push(`Column "${c}" holds numbers stored as strings; declare its kind or normalize the cells, else it charts as a category.`);
+      out.push(
+        `Column "${c}" holds numbers stored as strings; declare its kind or normalize the cells, else it charts as a category.`,
+      );
     } else if (vals.some((v) => typeof v === "object" && !(v instanceof Date))) {
       out.push(`Column "${c}" holds objects (a driver-wrapped value?); normalize to a scalar or declare its fields.`);
     }

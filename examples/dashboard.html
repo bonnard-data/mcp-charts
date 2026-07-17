@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bonnard Dashboard Harness</title>
+    <style>
+      body {
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          sans-serif;
+        margin: 24px;
+        color: #1a1a1a;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      select {
+        font-size: 14px;
+        padding: 4px 8px;
+      }
+      /* Frame the widget iframe; the width toggle drives the responsive 1-col fallback. */
+      iframe {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        height: 720px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Dashboard harness</h1>
+    <p>
+      Static, host-free preview of the widget rendering each shared fixture. Requires a root
+      <code>pnpm build</code> first (populates <code>packages/*/dist</code>), then serve the repo root (<code
+        >python3 -m http.server 8000</code
+      >) and open <code>/examples/dashboard.html</code>.
+    </p>
+    <div class="controls">
+      <label
+        >Fixture
+        <select id="fixture"></select
+      ></label>
+      <label
+        >Viewport
+        <select id="width">
+          <option value="480">480px (1-col fallback)</option>
+          <option value="900" selected>900px</option>
+        </select></label
+      >
+    </div>
+    <iframe id="frame" src="../packages/widget/dist/index.html#harness" width="900"></iframe>
+
+    <script type="module">
+      import { dashboardFixtures } from "../packages/core/dist/fixtures.js";
+
+      const frame = document.getElementById("frame");
+      const fixtureSel = document.getElementById("fixture");
+      const widthSel = document.getElementById("width");
+
+      for (const fx of dashboardFixtures) {
+        const opt = document.createElement("option");
+        opt.value = opt.textContent = fx.name;
+        fixtureSel.append(opt);
+      }
+
+      function render() {
+        const fx = dashboardFixtures.find((f) => f.name === fixtureSel.value);
+        if (!fx) return;
+        frame.contentWindow?.postMessage({ type: "bonnard:harness-render", structuredContent: fx.spec }, "*");
+      }
+
+      fixtureSel.addEventListener("change", render);
+      widthSel.addEventListener("change", () => {
+        frame.width = widthSel.value;
+      });
+      // Re-send after the iframe (re)loads, so a refresh doesn't leave it blank.
+      frame.addEventListener("load", render);
+      render();
+    </script>
+  </body>
+</html>

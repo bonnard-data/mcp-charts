@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: [
     "src/index.ts",
+    "src/fixtures.ts",
     "src/bigquery.ts",
     "src/duckdb.ts",
     "src/postgres.ts",

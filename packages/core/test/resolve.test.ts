@@ -822,7 +822,7 @@ describe("resolve() — P0.2 numeric grouping column", () => {
       expect(spec.legend).toBe(false);
     });
 
-    it("folds categories beyond the series cap into \"Other\"", () => {
+    it('folds categories beyond the series cap into "Other"', () => {
       const many = Array.from({ length: 15 }, (_, i) => ({
         customer: `c${i}`,
         segment: `S${i}`,

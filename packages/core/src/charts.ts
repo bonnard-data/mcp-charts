@@ -10,7 +10,7 @@ import { WIDGET_HTML } from "./generated/widget-html.js";
 const ALL_CHART_TYPES: ChartType[] = ["line", "bar", "area", "pie", "scatter", "funnel", "waterfall", "table"];
 
 // MCP Apps: the widget is served as a ui:// resource; the tool links to it via _meta.
-const CHART_RESOURCE_URI = "ui://bonnard/chart";
+export const CHART_RESOURCE_URI = "ui://bonnard/chart";
 const APP_MIME_TYPE = "text/html;profile=mcp-app";
 
 /** Options for addCharts. */
@@ -125,6 +125,13 @@ function registerWidgetResource(server: McpServer): void {
       contents: [{ uri: CHART_RESOURCE_URI, mimeType: APP_MIME_TYPE, text: WIDGET_HTML }],
     }),
   );
+}
+
+/** Register the chart/dashboard widget ui:// resource. Idempotent per server. A consumer that
+ *  returns a ChartSpec/DashboardSpec from its own tool (instead of `visualize`) calls this so the
+ *  host has the widget to render into. */
+export function registerChartWidget(server: McpServer): void {
+  registerWidgetResource(server);
 }
 
 /** Register the generic `visualize` tool on an MCP server. */
