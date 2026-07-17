@@ -50,9 +50,14 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   const encodeRefs = (v?: string | string[]) => (v == null ? [] : Array.isArray(v) ? v : [v]);
   const unknownCols = [
     ...new Set(
-      [encode.x, ...encodeRefs(encode.y), encode.series, ...encodeRefs(encode.y2), ...encodeRefs(encode.line), encode.size].filter(
-        (c): c is string => !!c && !byName.has(c),
-      ),
+      [
+        encode.x,
+        ...encodeRefs(encode.y),
+        encode.series,
+        ...encodeRefs(encode.y2),
+        ...encodeRefs(encode.line),
+        encode.size,
+      ].filter((c): c is string => !!c && !byName.has(c)),
     ),
   ];
   if (unknownCols.length) {
@@ -589,7 +594,9 @@ function resolveWaterfall(
   // Say when we guessed: a pure-delta input has no totals, so defaulting first/last would be wrong.
   const notes = markerCol
     ? []
-    : ["No totals column found, so the first and last rows are treated as the opening and closing totals. Mark a column (e.g. type = total) to change this."];
+    : [
+        "No totals column found, so the first and last rows are treated as the opening and closing totals. Mark a column (e.g. type = total) to change this.",
+      ];
 
   const valField = byName.get(value);
   const colMeta = (k: string) => {
