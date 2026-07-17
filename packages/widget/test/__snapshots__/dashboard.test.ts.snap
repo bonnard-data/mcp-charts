@@ -1,0 +1,50 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderDashboardShell — snapshots > shell snapshot: degenerate 1`] = `"<div class="grid" style="--cols:2"><div class="cell chart" id="cell-0"></div><div class="cell kpi"><div class="kpi-label">Refunds</div><div class="kpi-value">—</div></div></div>"`;
+
+exports[`renderDashboardShell — snapshots > shell snapshot: grid-2x2 1`] = `"<div class="grid" style="--cols:2"><div class="cell chart" id="cell-0"></div><div class="cell chart" id="cell-1"></div><div class="cell chart" id="cell-2"></div><div class="cell chart" id="cell-3"></div></div>"`;
+
+exports[`renderDashboardShell — snapshots > shell snapshot: kpi-row 1`] = `"<div class="grid" style="--cols:3"><div class="cell kpi"><div class="kpi-label">Revenue</div><div class="kpi-value">$128,400<span class="kpi-delta up">▲ $12,400</span></div><div class="kpi-caption">vs last month</div></div><div class="cell kpi"><div class="kpi-label">Conversion</div><div class="kpi-value">18.4%<span class="kpi-delta down">▼ 2.1%</span></div></div><div class="cell kpi"><div class="kpi-label">Orders</div><div class="kpi-value">1,042</div><div class="kpi-caption">this month</div></div></div>"`;
+
+exports[`renderDashboardShell — snapshots > shell snapshot: mixed 1`] = `"<div class="dash-title">Sales Dashboard</div><div class="grid" style="--cols:2"><div class="cell text-block" data-span="2"><h3>Q2 Overview</h3><div class="text-body">Revenue is up quarter over quarter, led by the EU region.</div></div><div class="cell kpi"><div class="kpi-label">Revenue</div><div class="kpi-value">$128,400<span class="kpi-delta up">▲ $12,400</span></div><div class="kpi-caption">vs last month</div></div><div class="cell kpi"><div class="kpi-label">Conversion</div><div class="kpi-value">18.4%<span class="kpi-delta down">▼ 2.1%</span></div></div><div class="cell chart" id="cell-3" data-span="2"></div></div>"`;
+
+exports[`renderDashboardShell — snapshots > shell snapshot: narrow-stacked 1`] = `"<div class="grid" style="--cols:1"><div class="cell kpi"><div class="kpi-label">Orders</div><div class="kpi-value">1,042</div><div class="kpi-caption">this month</div></div><div class="cell chart" id="cell-1"></div><div class="cell chart" id="cell-2"></div></div>"`;
+
+exports[`renderDashboardShell — snapshots > shell snapshot: single-chart 1`] = `"<div class="grid" style="--cols:1"><div class="cell chart" id="cell-0"></div></div>"`;
+
+exports[`renderToSvg — chart cell > single-chart cell renders to an SVG snapshot 1`] = `
+"<div class="title">Revenue by Status</div><svg width="720" height="360" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 360">
+<rect width="720" height="360" x="0" y="0" fill="none"></rect>
+<path d="M53 332.5L704 332.5" fill="none" pointer-events="visible" stroke="#e5e7eb" class="zr0-cls-0"></path>
+<path d="M53 269.5L704 269.5" fill="none" pointer-events="visible" stroke="#e5e7eb" class="zr0-cls-0"></path>
+<path d="M53 205.5L704 205.5" fill="none" pointer-events="visible" stroke="#e5e7eb" class="zr0-cls-0"></path>
+<path d="M53 142.5L704 142.5" fill="none" pointer-events="visible" stroke="#e5e7eb" class="zr0-cls-0"></path>
+<path d="M53 79.5L704 79.5" fill="none" pointer-events="visible" stroke="#e5e7eb" class="zr0-cls-0"></path>
+<path d="M53 16.5L704 16.5" fill="none" pointer-events="visible" stroke="#e5e7eb" class="zr0-cls-0"></path>
+<path d="M53 332.5L704 332.5" fill="none" pointer-events="visible" stroke="#e5e7eb" stroke-linecap="round" class="zr0-cls-0"></path>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" transform="translate(44.96 332)" fill="#6b7280">0</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" transform="translate(44.96 268.8)" fill="#6b7280">10,000</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" transform="translate(44.96 205.6)" fill="#6b7280">20,000</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" transform="translate(44.96 142.4)" fill="#6b7280">30,000</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" transform="translate(44.96 79.2)" fill="#6b7280">40,000</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" transform="translate(44.96 16)" fill="#6b7280">50,000</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" y="6" transform="translate(161.4667 340)" fill="#6b7280">shipped</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" y="6" transform="translate(378.48 340)" fill="#6b7280">open</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;" y="6" transform="translate(595.4933 340)" fill="#6b7280">cancelled</text>
+<path d="M137.5 332l48 0l0 -276.2l-48 0Z" fill="#5b5bd6" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr0-cls-1"></path>
+<path d="M354.5 332l48 0l0 -53.1l-48 0Z" fill="#5b5bd6" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr0-cls-1"></path>
+<path d="M571.5 332l48 0l0 -9.2l-48 0Z" fill="#5b5bd6" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr0-cls-1"></path>
+<style ><![CDATA[
+.zr0-cls-0:hover {
+pointer-events:none;
+}
+.zr0-cls-1:hover {
+cursor:pointer;
+fill:rgba(100,100,235,1);
+}
+
+]]>
+
+</style>
+</svg>"
+`;

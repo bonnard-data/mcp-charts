@@ -38,7 +38,7 @@ export { resolve } from "./resolve/resolve.js";
 export { inferFields } from "./resolve/infer.js";
 
 // The server API: register the visualize tool(s).
-export { addCharts } from "./charts.js";
+export { addCharts, registerChartWidget, CHART_RESOURCE_URI } from "./charts.js";
 export type { AddChartsOptions } from "./charts.js";
 
 // Adapter authoring kit: turn a SQL result (rows + column types) into typed ChartData, plus the
