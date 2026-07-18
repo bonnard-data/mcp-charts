@@ -33,6 +33,16 @@ export type {
 // Runtime guards: discriminate a DashboardSpec from a single ChartSpec.
 export { isDashboardSpec, isChartSpec } from "./dashboard.js";
 
+// Dashboard authoring: build cells + register a dashboard tool without the per-cell/per-tool glue.
+export {
+  chartCell,
+  dashboardResult,
+  summarizeDashboard,
+  DASHBOARD_OUTPUT_SCHEMA,
+  addDashboardTool,
+} from "./dashboard-tool.js";
+export type { ChartCellOptions, DashboardToolDef, DashboardHandlerResult } from "./dashboard-tool.js";
+
 // The pure brain: ChartData -> ChartSpec.
 export { resolve } from "./resolve/resolve.js";
 export { inferFields } from "./resolve/infer.js";

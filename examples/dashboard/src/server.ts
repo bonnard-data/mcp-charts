@@ -4,24 +4,15 @@
 // Serves MCP over Streamable HTTP at /mcp; point a remote MCP client (Claude Desktop custom
 // connector, Cursor, or `npx @modelcontextprotocol/inspector`) at http://localhost:3000/mcp.
 //
-// No database here on purpose: a DashboardSpec can come from any tool. Chart cells are built through
-// the library's own path (buildChartData + resolve), exactly like packages/core/src/fixtures.
+// No database here on purpose: a DashboardSpec can come from any tool. Chart cells are built with
+// chartCell(rows, opts), which infers the encoding from the raw rows via resolve().
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import {
-  buildChartData,
-  resolve,
-  registerChartWidget,
-  CHART_RESOURCE_URI,
-  type SourceColumn,
-  type ChartSpec,
-  type DashboardSpec,
-  type FieldKind,
-} from "@bonnard/mcp-charts";
+import { addDashboardTool, chartCell, type DashboardSpec } from "@bonnard/mcp-charts";
 
 // 1. In-memory data (in real life this is your warehouse / API / analytics store).
 type RegionRow = { region: string; revenue: number };
@@ -51,25 +42,6 @@ const ORDERS_BY_STATUS: StatusRow[] = [
 
 // Prior-period revenue, for the KPI delta.
 const PRIOR_TOTAL_REVENUE = 275_000;
-
-// 2. Column-type tokens -> FieldKind, so buildChartData types each cell the way an adapter would.
-const KIND_BY_TOKEN: Record<string, FieldKind> = {
-  string: "string",
-  number: "number",
-  time: "time",
-  boolean: "boolean",
-};
-const mapKind = (type: unknown): FieldKind => KIND_BY_TOKEN[String(type)] ?? "string";
-const col = (name: string, type: string): SourceColumn => ({ name, type });
-
-/** Build a chart cell's ChartSpec through the library path: buildChartData -> resolve. */
-function chartSpec(
-  rows: Record<string, unknown>[],
-  columns: SourceColumn[],
-  opts: { chartType: ChartSpec["chartType"]; title: string },
-): ChartSpec {
-  return resolve(buildChartData({ rows, columns, mapKind }), opts);
-}
 
 /** Compose the DashboardSpec for a region (or all regions when unset). */
 function buildDashboard(region?: string): DashboardSpec {
@@ -102,19 +74,8 @@ function buildDashboard(region?: string): DashboardSpec {
         value: totalOrders,
         caption: "this period",
       },
-      {
-        spec: chartSpec(monthly, [col("month", "time"), col("revenue", "number")], {
-          chartType: "line",
-          title: "Revenue by month",
-        }),
-        span: 2,
-      },
-      {
-        spec: chartSpec(regionRows, [col("region", "string"), col("revenue", "number")], {
-          chartType: "bar",
-          title: "Revenue by region",
-        }),
-      },
+      chartCell(monthly, { chartType: "line", title: "Revenue by month", span: 2 }),
+      chartCell(regionRows, { chartType: "bar", title: "Revenue by region" }),
       {
         type: "text",
         heading: "Summary",
@@ -127,39 +88,16 @@ function buildDashboard(region?: string): DashboardSpec {
 const totalRevenue = (rows: RegionRow[]) => sum(rows.map((r) => r.revenue));
 const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
 
-/** A compact text summary of the dashboard for the model + a non-widget fallback. */
-function summarize(dash: DashboardSpec): string {
-  const lines: string[] = [dash.title ?? "Sales Dashboard"];
-  for (const item of dash.items) {
-    if ("type" in item && item.type === "kpi") {
-      lines.push(`- ${item.label}: ${item.value}${item.delta != null ? ` (Δ ${item.delta})` : ""}`);
-    } else if ("type" in item && item.type === "text") {
-      // narrative captured in the text block itself; skip in the summary
-    } else if ("spec" in item) {
-      lines.push(`- ${item.spec.title}: ${item.spec.chartType} chart, ${item.spec.data.length} points`);
-    }
-  }
-  return lines.join("\n");
-}
-
-// Loose outputSchema for the DashboardSpec envelope, mirroring how charts.ts shapes visualize's
-// outputSchema: permissive records so a valid spec is never rejected by schema validation.
-const dashboardOutputSchema = {
-  title: z.string().optional(),
-  columns: z.number().optional(),
-  items: z.array(z.record(z.string(), z.unknown())),
-  notes: z.array(z.string()).optional(),
-};
-
 // 3. Build a fresh MCP server (widget resource + the sales_dashboard tool). One instance per
-// Streamable HTTP session, the standard sessioned pattern.
+// Streamable HTTP session, the standard sessioned pattern. addDashboardTool registers the widget
+// resource + the tool (outputSchema, widget _meta, result envelope, error handling).
 function buildMcpServer(): McpServer {
   const server = new McpServer({ name: "example-dashboard", version: "0.1.0" });
-  registerChartWidget(server);
 
-  server.registerTool(
-    "sales_dashboard",
+  addDashboardTool(
+    server,
     {
+      name: "sales_dashboard",
       title: "Sales dashboard",
       description:
         "Return a multi-chart sales dashboard (KPIs + charts + text) as a DashboardSpec. " +
@@ -167,26 +105,8 @@ function buildMcpServer(): McpServer {
       inputSchema: {
         region: z.enum(["EU", "US", "APAC"]).optional().describe("Filter the dashboard to one region"),
       },
-      outputSchema: dashboardOutputSchema,
-      annotations: { readOnlyHint: true, openWorldHint: false },
-      // Link the tool to its widget. `ui.resourceUri` is the MCP Apps standard (Claude, Cursor,
-      // Inspector); `openai/outputTemplate` is the ChatGPT Apps SDK alias.
-      _meta: {
-        ui: { resourceUri: CHART_RESOURCE_URI },
-        "openai/outputTemplate": CHART_RESOURCE_URI,
-      },
     },
-    async (args: { region?: string }) => {
-      const dash = buildDashboard(args.region);
-      return {
-        content: [{ type: "text" as const, text: summarize(dash) }],
-        structuredContent: dash as unknown as Record<string, unknown>,
-        _meta: {
-          ui: { resourceUri: CHART_RESOURCE_URI },
-          "openai/outputTemplate": CHART_RESOURCE_URI,
-        },
-      };
-    },
+    (args: { region?: string }) => buildDashboard(args.region),
   );
 
   return server;

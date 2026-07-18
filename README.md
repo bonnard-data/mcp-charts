@@ -67,6 +67,27 @@ numeric/temporal columns aren't inferred from raw driver values.
 
 Eight types, chosen automatically from the shape of your data or set explicitly: `bar`, `line`, `area`, `pie`, `scatter`, `funnel`, `waterfall`, `table`. Plus bar variants (stacked, grouped, 100% stacked, horizontal), dual-axis combos, bubble sizing, and reference lines. See the [chart types reference](https://docs.bonnard.dev/mcp-charts/chart-types).
 
+## Dashboards
+
+Return a `DashboardSpec` (a grid of chart cells, KPI tiles, and text blocks) from your own tool.
+`chartCell` builds a cell from raw rows and `addDashboardTool` wires the widget, output schema, and
+result envelope the same way `addCharts` does:
+
+```ts
+import { addDashboardTool, chartCell } from "@bonnard/mcp-charts";
+
+addDashboardTool(server, { name: "sales_dashboard", description: "Revenue overview" }, () => ({
+  title: "Sales Dashboard",
+  columns: 2,
+  items: [
+    { type: "kpi", label: "Revenue", value: 336800, format: "currency", currency: "USD", delta: 61800 },
+    chartCell(monthlyRows, { chartType: "line", title: "Revenue by month", span: 2 }),
+    chartCell(regionRows, { chartType: "bar", title: "Revenue by region" }),
+    { type: "text", heading: "Summary", text: "Trending up, led by EU and US." },
+  ],
+}));
+```
+
 ## Warehouse adapters
 
 Skip writing `runSql` by hand. Each adapter wraps your driver and maps native column types to chart roles (dimension, measure, time):
