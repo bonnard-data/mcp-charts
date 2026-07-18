@@ -139,14 +139,14 @@ function readBody(req: IncomingMessage): Promise<unknown> {
       try {
         resolve(JSON.parse(raw));
       } catch (err) {
-        reject(err);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
     req.on("error", reject);
   });
 }
 
-const httpServer = createServer(async (req, res) => {
+async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   applyCors(req, res);
   if (req.method === "OPTIONS") {
     res.writeHead(204).end();
@@ -194,6 +194,13 @@ const httpServer = createServer(async (req, res) => {
   const server = buildMcpServer();
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
+}
+
+const httpServer = createServer((req, res) => {
+  void handleRequest(req, res).catch((err) => {
+    console.error("request error:", err);
+    if (!res.headersSent) res.writeHead(500).end("Internal error");
+  });
 });
 
 const PORT = Number(process.env.PORT ?? 3000);
