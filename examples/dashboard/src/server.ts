@@ -7,11 +7,9 @@
 //
 // No database here on purpose: a spec can come from any tool. Single charts are built with
 // chart(rows, opts); dashboard cells with chartCell(rows, opts). Both infer via resolve().
-import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   addDashboardViews,
@@ -179,21 +177,17 @@ function buildMcpServer(): McpServer {
   return server;
 }
 
-// 4. Streamable HTTP hosting. Sessioned: the first (initialize) POST creates a transport +
-// server, later requests reuse it via the mcp-session-id header.
-const transports = new Map<string, StreamableHTTPServerTransport>();
+// 4. Streamable HTTP hosting, STATELESS: a fresh server + transport per request, no sessions. This
+// keeps a server restart invisible to the client (there is no session to invalidate), so Claude
+// Desktop's "reload tools" keeps working across restarts. Trade-off: no server->client push
+// (notifications/SSE) - not needed here, since these tools are request/response only.
 
-// CORS is essential for browser-based clients (Inspector) and Claude Desktop remote connectors:
-// allow the MCP headers on requests and EXPOSE mcp-session-id so the client can read + echo it.
+// CORS for browser-based clients (Inspector) and Claude Desktop remote connectors.
 function applyCors(req: IncomingMessage, res: ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Accept, mcp-session-id, mcp-protocol-version, last-event-id",
-  );
-  res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, mcp-protocol-version");
 }
 
 function readBody(req: IncomingMessage): Promise<unknown> {
@@ -226,39 +220,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-  // Reuse an existing session's transport for GET (SSE), DELETE (teardown), and follow-up POSTs.
-  if (sessionId && transports.has(sessionId)) {
-    const transport = transports.get(sessionId)!;
-    const body = req.method === "POST" ? await readBody(req).catch(() => undefined) : undefined;
-    await transport.handleRequest(req, res, body);
-    return;
-  }
-
+  // GET (SSE) and DELETE (session teardown) are session features we don't use in stateless mode.
   if (req.method !== "POST") {
-    res.writeHead(400).end("Missing or unknown mcp-session-id");
+    res.writeHead(405).end("Method Not Allowed");
     return;
   }
 
-  // A POST without a known session: only a valid initialize request may open one.
+  // Fresh server + stateless transport per request (a shared instance would collide JSON-RPC ids
+  // across concurrent clients). sessionIdGenerator: undefined = no session id, no session state.
   const body = await readBody(req).catch(() => undefined);
-  if (!isInitializeRequest(body)) {
-    res.writeHead(400).end("Bad Request: expected an initialize request to open a session");
-    return;
-  }
-
-  const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    onsessioninitialized: (id: string) => {
-      transports.set(id, transport);
-    },
-  });
-  transport.onclose = () => {
-    if (transport.sessionId) transports.delete(transport.sessionId);
-  };
-
   const server = buildMcpServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on("close", () => {
+    void transport.close();
+    void server.close();
+  });
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 }
