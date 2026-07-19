@@ -12,7 +12,7 @@ import type {
   ResolveOptions,
   SeriesSpec,
 } from "../types.js";
-import { inferFields } from "./infer.js";
+import { inferFields, looksLikeLooseDate } from "./infer.js";
 import { detectChartType } from "./detect.js";
 import { pivotData } from "./pivot.js";
 import { fillMissingTimeIntervals } from "./fill-time.js";
@@ -61,10 +61,9 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     ),
   ];
   if (unknownCols.length) {
-    data.notes = [
-      `Ignored unknown encode column${unknownCols.length > 1 ? "s" : ""} ${unknownCols.map((c) => `"${c}"`).join(", ")}; available: ${fields.map((f) => f.name).join(", ")}.`,
-      ...(data.notes ?? []),
-    ];
+    const msg = `Ignored unknown encode column${unknownCols.length > 1 ? "s" : ""} ${unknownCols.map((c) => `"${c}"`).join(", ")}; available: ${fields.map((f) => f.name).join(", ")}.`;
+    if (opts.strict) throw new Error(msg);
+    data.notes = [msg, ...(data.notes ?? [])];
   }
 
   // Scatter/bubble: x AND y are measures, one row = one point. Skip the dimension/aggregate path
@@ -117,11 +116,12 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // --- measures (y) --- (never plot the x column as a measure)
   // y2 = measures pulled onto a secondary right axis (dual-axis combo); excluded from the left.
   const y2Names = encode.y2 ? (Array.isArray(encode.y2) ? encode.y2 : [encode.y2]) : [];
+  // An explicit encode.y that names a column not in the result is already flagged as "ignored"
+  // above; drop it here too so the spec doesn't carry a phantom series with no backing column
+  // (the note and the spec then agree). The zero-series guard covers the "all dropped" case.
   const yNames = (
     encode.y
-      ? Array.isArray(encode.y)
-        ? encode.y
-        : [encode.y]
+      ? (Array.isArray(encode.y) ? encode.y : [encode.y]).filter((n) => byName.has(n))
       : fields.filter((f) => f.role === "measure" && f.name !== x).map((f) => f.name)
   ).filter((n) => !y2Names.includes(n));
 
@@ -175,6 +175,16 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     (timeField && dimField && dimField.name !== x && dimField.kind === "string" ? dimField.name : undefined);
 
   const notes: string[] = [...(data.notes ?? [])];
+
+  // Loose-date note (advisory only): a string x whose values look like non-ISO dates
+  // (MM/DD/YYYY, "Jan 2025", ...) is plotted as unordered categories, not a sorted time axis. We
+  // don't parse (MM/DD vs DD/MM is ambiguous) — we tell the author to return ISO dates instead.
+  if (x && xField?.kind === "string" && rows.some((r) => looksLikeLooseDate(r[x]))) {
+    notes.push(
+      `Column "${x}" looks like non-ISO dates; plotted as unordered categories. Return ISO dates (YYYY-MM-DD) for a sorted time axis.`,
+    );
+  }
+
   let series: SeriesSpec[];
   let yAxisRight: AxisSpec | undefined;
   if (pivotDim && yNames.length === 1) {
@@ -250,6 +260,29 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
           );
       }
     }
+  }
+
+  // Zero series on a plotting chart type = a blank chart with nothing to draw. The usual cause is
+  // a value column that arrived as strings (typed as a dimension) or a fields/encode declaration
+  // that left no measure. Note it (or throw under strict) instead of rendering a silent blank.
+  if (series.length === 0) {
+    const msg =
+      "No measure column to plot - the chart has no data series. Check that value columns contain numbers (not strings), or declare types via fields.";
+    if (opts.strict) throw new Error(msg);
+    notes.push(msg);
+  }
+
+  // Forced-type precondition notes: the shape doesn't fit the requested chart, so we reinterpreted
+  // rather than reject. Say what we did (strict throws) so the author isn't left guessing.
+  if (opts.chartType === "pie" && series.length > 1) {
+    const msg = `A pie needs one category + one measure; got ${series.length} measures - showing them as separate slices, which is usually not what a pie means.`;
+    if (opts.strict) throw new Error(msg);
+    notes.push(msg);
+  }
+  if (opts.chartType === "line" && xField?.kind === "string" && series.length > 0) {
+    const msg = `A line over categorical "${x}" implies an order that may not exist; consider a bar chart.`;
+    if (opts.strict) throw new Error(msg);
+    notes.push(msg);
   }
 
   // Sort a time / numeric x ascending. Agent SQL often omits ORDER BY, which makes lines
@@ -545,6 +578,14 @@ function resolveFunnel(
       ...(f?.currency && { currency: f.currency }),
     };
   };
+  // No real category to stage the funnel: the stage column is a promoted measure (its values, not a
+  // dimension, became the labels). Say so (strict throws) instead of silently reinterpreting.
+  const notes: string[] = [];
+  if (!encode.x && byName.get(dim)?.kind === "number") {
+    const msg = `A funnel needs a stage/label column and one measure; got only measures - using "${dim}" values as stage labels.`;
+    if (opts.strict) throw new Error(msg);
+    notes.push(msg);
+  }
   return {
     chartType: "funnel",
     data,
@@ -553,6 +594,7 @@ function resolveFunnel(
     legend: false,
     ...(opts.title && { title: opts.title }),
     columns: [dim, value].map(colMeta),
+    ...(notes.length && { notes }),
   };
 }
 

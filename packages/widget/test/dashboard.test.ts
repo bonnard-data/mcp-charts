@@ -5,8 +5,9 @@ import { describe, it, expect } from "vitest";
 import { parseHTML } from "linkedom";
 import { dashboardFixtures } from "@bonnard/mcp-charts/fixtures";
 import type { DashboardSpec } from "@bonnard/mcp-charts";
-import { renderDashboardShell, renderKpi } from "../src/dashboard.js";
+import { renderDashboardShell, renderKpi, renderChartNotes } from "../src/dashboard.js";
 import { renderToSvg } from "../src/ssr.js";
+import type { ChartSpec } from "@bonnard/mcp-charts";
 
 const spec = (name: string): DashboardSpec => dashboardFixtures.find((f) => f.name === name)!.spec;
 const doc = (html: string): Document => parseHTML(`<div>${html}</div>`).document as unknown as Document;
@@ -19,12 +20,12 @@ describe("renderDashboardShell — structure", () => {
     expect(d.querySelectorAll(".cell").length).toBe(4);
     // All four are chart cells (bar, line, pie, table — a table is a chart cell painted by main.ts).
     expect(d.querySelectorAll(".cell.chart").length).toBe(4);
-    // Every chart cell (including the table) is an empty placeholder keyed by index.
-    d.querySelectorAll(".cell").forEach((cell, i) => {
-      if (cell.classList.contains("chart")) {
-        expect(cell.getAttribute("id")).toBe(`cell-${i}`);
-        expect(cell.innerHTML).toBe("");
-      }
+    // Every chart cell holds an empty `.cell-chart` mount point keyed by index (the note sibling,
+    // when present, sits next to it — none of these fixtures carry notes).
+    d.querySelectorAll(".cell.chart").forEach((cell, i) => {
+      const mount = cell.querySelector(".cell-chart");
+      expect(mount?.getAttribute("id")).toBe(`cell-${i}`);
+      expect(mount?.innerHTML).toBe("");
     });
   });
 
@@ -72,6 +73,43 @@ describe("renderDashboardShell — structure", () => {
     expect(html).not.toContain("<img");
     expect(html).not.toContain("<b>hi</b>");
     expect(html).toContain("&lt;img");
+  });
+
+  // A chart cell whose spec carries a note renders a `.cell-notes` sibling next to the mount point,
+  // so a blank-chart / coerced-column advisory reaches the human, not just the agent text.
+  it("chart cell with notes renders a .cell-notes block next to the mount point", () => {
+    const spec: ChartSpec = {
+      chartType: "bar",
+      data: [],
+      x: "region",
+      series: [],
+      legend: false,
+      notes: ["No measure column to plot - the chart has no data series."],
+    };
+    const dash: DashboardSpec = { items: [{ spec }] };
+    const d = doc(renderDashboardShell(dash));
+    const cell = d.querySelector(".cell.chart")!;
+    expect(cell.querySelector(".cell-chart")?.getAttribute("id")).toBe("cell-0");
+    expect(cell.querySelector(".cell-notes")?.textContent).toContain("No measure column to plot");
+  });
+
+  // The single-chart path (main.ts) and the dashboard cell share renderChartNotes, so this covers
+  // both: notes present -> a muted, escaped block; none -> empty string.
+  it("renderChartNotes renders (and escapes) notes, empty when there are none", () => {
+    const withNotes: ChartSpec = {
+      chartType: "line",
+      data: [],
+      x: "d",
+      series: [],
+      legend: false,
+      notes: ["<b>coerced</b> to numbers"],
+    };
+    const html = renderChartNotes(withNotes);
+    expect(html).toContain("cell-notes");
+    expect(html).toContain("&lt;b&gt;coerced");
+    expect(html).not.toContain("<b>coerced");
+    const none: ChartSpec = { chartType: "bar", data: [], x: "", series: [], legend: false };
+    expect(renderChartNotes(none)).toBe("");
   });
 });
 

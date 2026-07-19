@@ -132,6 +132,41 @@ addCharts(server, { runSql: postgresRunSql(pool) });
 
 Bundled for Postgres, BigQuery, Snowflake, Databricks, and DuckDB. Each driver is an optional peer dependency, installed only if you import its subpath. See [warehouse adapters](https://docs.bonnard.dev/mcp-charts/adapters).
 
+## Connecting a database
+
+When you build views from live, unseen data, prefer a **typed source**. An adapter (or `buildChartData`) hands `resolve()` a `ChartData` with column types from your driver, so the encoding is decided from types, not sniffed from a sample:
+
+```ts
+import { chart, buildChartData } from "@bonnard/mcp-charts";
+
+// A typed ChartData is accepted anywhere raw rows are — same one line, driver types instead of a sniff.
+const data = buildChartData({ rows, columns, mapKind }); // or an adapter's runSql(...)
+const spec = chart(data, { chartType: "line" });
+```
+
+`chart(rows, opts)` and `chart(chartData, opts)` are the same call: pass raw `Record<string, unknown>[]` to sniff, or a `{ rows, fields?, encode?, notes? }` to trust declared types.
+
+**Numbers must arrive as numbers.** Some drivers stringify decimals/bigints (`revenue: "1234"`). Inference recovers all-numeric-string columns to a measure and adds an advisory note, but the robust fix is to declare the column's `kind` (via `fields` or an adapter) or cast in SQL. `fields` and `encode` are trusted verbatim: a wrong declaration is honored, so a mistyped measure yields a blank series (with a note).
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Blank chart, "No measure column to plot" note | value column arrived as strings, or a `fields`/`encode` declaration left no measure | return numbers (not numeric strings), or declare the column `kind: "number"` |
+| Bar/line over "dates" isn't sorted; "looks like non-ISO dates" note | dates are strings in a loose format (`01/15/2026`, `Jan 2025`) | return ISO dates (`YYYY-MM-DD`) so the axis sorts chronologically |
+| Multi-slice pie / odd funnel, with a precondition note | forced a chart type whose shape needs a category + a measure | supply one dimension + one measure, or drop the forced `chartType` |
+| Ignored encode column note | `encode.x`/`encode.y` names a column not in the result | fix the column name (the note lists the available columns) |
+
+To catch these before a host renders, assert the encoding in a test with `explain()`:
+
+```ts
+import { explain } from "@bonnard/mcp-charts";
+
+expect(explain(sampleRows, { chartType: "bar" }).series.length).toBeGreaterThan(0);
+// or fail loud on a bad encoding:
+explain(sampleRows, { chartType: "bar", strict: true }); // throws on zero series / ignored encode
+```
+
 ## Security
 
 `visualize` executes agent-written SQL against your database. Treat it as untrusted input: connect `runSql` to a **read-only, least-privilege** role scoped to the data you want exposed. Your database permissions are the security boundary; the SDK does not sandbox queries. See [Security](https://docs.bonnard.dev/mcp-charts/getting-started#security).

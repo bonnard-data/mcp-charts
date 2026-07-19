@@ -3,6 +3,7 @@
 // This is what lets resolve() decide x / y / series when the data source did not
 // supply full typing (e.g. raw SQL rows).
 import type { ChartData, FieldFormat, FieldKind, FieldMeta, FieldRole, TimeGranularity } from "../types.js";
+import { allNumericStrings } from "../validate.js";
 
 // Period-string -> granularity. Lets the raw-SQL path recognize time buckets that aren't full ISO
 // dates (e.g. strftime('%Y-%m') -> "2025-01") so time series are typed TEMPORAL — ordered, drawn
@@ -70,15 +71,20 @@ export function sniffKind(rows: Record<string, unknown>[], name: string): FieldK
     return "string";
   };
   let kind: FieldKind | undefined;
-  let seen = 0;
+  const sample: unknown[] = [];
   for (const r of rows) {
     const v = r[name];
     if (v == null) continue;
+    sample.push(v);
     const k = kindOf(v);
     if (kind === undefined) kind = k;
     else if (k !== kind) return "string";
-    if (++seen >= KIND_SAMPLE) break;
+    if (sample.length >= KIND_SAMPLE) break;
   }
+  // Numeric-string recovery: a column that consensus-typed as `string` but holds only numeric
+  // strings (and isn't year-like) is a driver footgun, not a category. Type it `number` so
+  // resolve()'s measure-coercion can plot it, instead of demoting it to a silent blank series.
+  if (kind === "string" && allNumericStrings(sample)) return "number";
   return kind ?? "string";
 }
 
@@ -112,6 +118,24 @@ export function formatHint(name: string, values?: unknown[]): FieldFormat | unde
     return "percent";
   }
   return undefined;
+}
+
+// Non-ISO date shapes we recognize only to WARN about (MM/DD/YYYY, DD-MM-YYYY, "Jan 2025", ...).
+// We deliberately do NOT parse them: MM/DD vs DD/MM is ambiguous, so guessing an order would be
+// worse than plotting source-order categories with a note telling the author to return ISO dates.
+const LOOSE_DATE_RES = [
+  /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/, // 01/15/2026, 15-01-2026
+  /^\d{1,2}[/-]\d{4}$/, // 01/2026
+  /^[A-Za-z]{3,9}\.?\s+\d{4}$/, // Jan 2025, January 2025
+  /^[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}$/, // Jan 15, 2025
+];
+
+/** A string value that reads as a date in a non-ISO (ambiguous) format. sniffTimeGranularity
+ *  already claims the ISO shapes; this only matches the ones we plot as categories + warn about. */
+export function looksLikeLooseDate(value: unknown): boolean {
+  return (
+    typeof value === "string" && sniffTimeGranularity(value) === null && LOOSE_DATE_RES.some((re) => re.test(value))
+  );
 }
 
 // Granularity from the column name, for time columns whose values don't reveal it (e.g. a DATE

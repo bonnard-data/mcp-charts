@@ -23,6 +23,7 @@ export type {
   ColumnSpec,
   ReferenceLine,
   ResolveOptions,
+  ChartExplanation,
   KpiTile,
   TextBlock,
   ChartCell,
@@ -38,6 +39,7 @@ export { isDashboardSpec, isChartSpec } from "./dashboard.js";
 export {
   chart,
   chartCell,
+  explain,
   dashboardResult,
   summarizeDashboard,
   DASHBOARD_OUTPUT_SCHEMA,

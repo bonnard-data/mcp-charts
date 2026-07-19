@@ -6,7 +6,7 @@ import type { ChartSpec, DashboardSpec } from "@bonnard/mcp-charts";
 import { echarts, themeName } from "./echarts-core.js";
 import { specToOption } from "./spec-to-option.js";
 import { renderTable } from "./table.js";
-import { renderDashboardShell, isChartSpec, isDashboardSpec } from "./dashboard.js";
+import { renderDashboardShell, renderChartNotes, isChartSpec, isDashboardSpec } from "./dashboard.js";
 import { esc } from "./format.js";
 
 const root = document.getElementById("root")!;
@@ -57,11 +57,11 @@ function renderChart(spec: ChartSpec) {
   teardown();
   // Tables are HTML, not a charting-library job.
   if (spec.chartType === "table") {
-    root.innerHTML = renderTable(spec);
+    root.innerHTML = `${renderTable(spec)}${renderChartNotes(spec)}`;
     return;
   }
   const title = spec.title ? `<div class="title">${esc(spec.title)}</div>` : "";
-  root.innerHTML = `${title}<div class="ec" id="ec"></div>`;
+  root.innerHTML = `${title}<div class="ec" id="ec"></div>${renderChartNotes(spec)}`;
   mountChart(document.getElementById("ec")!, spec);
 }
 

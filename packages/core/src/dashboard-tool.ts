@@ -4,8 +4,19 @@
 // remove the per-cell and per-tool boilerplate the example used to hand-write.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ChartCell, ChartSpec, DashboardSpec, Encode, FieldMeta, ResolveOptions } from "./types.js";
+import type {
+  ChartCell,
+  ChartData,
+  ChartExplanation,
+  ChartSpec,
+  DashboardSpec,
+  Encode,
+  FieldMeta,
+  ResolveOptions,
+} from "./types.js";
 import { resolve } from "./resolve/resolve.js";
+import { inferFields } from "./resolve/infer.js";
+import { warnUntypedColumns } from "./validate.js";
 import { isChartSpec, isDashboardSpec } from "./dashboard.js";
 import { registerChartWidget, CHART_RESOURCE_URI } from "./charts.js";
 
@@ -29,25 +40,74 @@ export interface ChartCellOptions extends ResolveOptions {
 /** Options for a standalone chart: resolve()'s options plus the field-typing / encoding escape hatches. */
 export type ChartOptions = ResolveOptions & { fields?: FieldMeta[]; encode?: Encode };
 
-/**
- * Build a standalone ChartSpec from raw rows, inferring the encoding via resolve(). `fields` and
- * `encode` are escape hatches for cases inference can't nail. The sibling of chartCell, which wraps
- * this spec in a dashboard cell.
- */
-export function chart(rows: Record<string, unknown>[], opts: ChartOptions = {}): ChartSpec {
-  const { fields, encode, ...resolveOpts } = opts;
-  return resolve({ rows, fields, encode }, resolveOpts);
+/** Normalize the first arg of chart()/chartCell() into a ChartData. Raw rows (an array) become
+ *  `{ rows }` + inferred fields; a typed ChartData (from an adapter) passes through unsniffed, with
+ *  opts.fields/encode layering onto any it already declares. */
+function toChartData(source: Record<string, unknown>[] | ChartData, opts: { fields?: FieldMeta[]; encode?: Encode }) {
+  if (Array.isArray(source)) return { rows: source, fields: opts.fields, encode: opts.encode };
+  return {
+    rows: source.rows,
+    fields: opts.fields ?? source.fields,
+    encode: opts.encode ?? source.encode,
+    notes: source.notes,
+  };
+}
+
+// Merge integrator advisories (numbers-as-strings, wrapper objects) into a spec's notes, deduped.
+// After numeric-string recovery these are "recovered" signals, so they surface on the views path
+// the way visualize already surfaces them (visualize logs them itself; don't double up there).
+function mergeAdvisories(spec: ChartSpec, data: ChartData): ChartSpec {
+  const advisories = warnUntypedColumns(data);
+  if (advisories.length === 0) return spec;
+  const notes = [...(spec.notes ?? [])];
+  for (const a of advisories) if (!notes.includes(a)) notes.push(a);
+  return { ...spec, notes };
 }
 
 /**
- * Build a dashboard chart cell from raw rows, inferring the encoding via resolve(). `fields` and
- * `encode` are escape hatches for cases inference can't nail; `span` sets the grid width.
+ * Build a standalone ChartSpec, inferring the encoding via resolve(). The first arg is EITHER raw
+ * rows (`Record<string, unknown>[]` — inference sniffs types) OR a typed `ChartData` (`{ rows,
+ * fields?, encode?, notes? }` from an adapter — driver types are trusted, no sniff). For a
+ * DB-connected view, `chart(await runSql("select ..."), { chartType: "line" })` is the same one
+ * line but rides declared types. `fields`/`encode` are escape hatches for the raw path. The sibling
+ * of chartCell, which wraps this spec in a dashboard cell.
  */
-export function chartCell(rows: Record<string, unknown>[], opts: ChartCellOptions): ChartCell {
+export function chart(source: Record<string, unknown>[] | ChartData, opts: ChartOptions = {}): ChartSpec {
+  const { fields, encode, ...resolveOpts } = opts;
+  const data = toChartData(source, { fields, encode });
+  return mergeAdvisories(resolve(data, resolveOpts), data);
+}
+
+/**
+ * Build a dashboard chart cell, inferring the encoding via resolve(). Like chart(), the first arg is
+ * either raw rows or a typed `ChartData`. `fields`/`encode` are escape hatches; `span` sets the grid
+ * width.
+ */
+export function chartCell(source: Record<string, unknown>[] | ChartData, opts: ChartCellOptions): ChartCell {
   const { span, ...chartOpts } = opts;
   return {
-    spec: chart(rows, chartOpts),
+    spec: chart(source, chartOpts),
     ...(span ? { span } : {}),
+  };
+}
+
+/**
+ * Diagnose how rows (or a typed ChartData) would be charted, WITHOUT building the render payload:
+ * the inferred field typing, the resolved chartType / x / series, and any notes. For asserting the
+ * encoding in a unit test or CI before a host ever renders it, e.g.
+ * `expect(explain(sampleRows, { chartType: "bar" }).series.length).toBeGreaterThan(0)`. Pair with
+ * `strict: true` to throw on a bad encoding (zero series, ignored encode column) instead of noting.
+ */
+export function explain(source: Record<string, unknown>[] | ChartData, opts: ChartOptions = {}): ChartExplanation {
+  const { fields, encode, ...resolveOpts } = opts;
+  const data = toChartData(source, { fields, encode });
+  const spec = mergeAdvisories(resolve(data, resolveOpts), data);
+  return {
+    fields: inferFields(data).map((f) => ({ name: f.name, kind: f.kind!, role: f.role! })),
+    chartType: spec.chartType,
+    x: spec.x,
+    series: spec.series.map((s) => s.key),
+    notes: spec.notes ?? [],
   };
 }
 
@@ -63,7 +123,8 @@ export function summarizeDashboard(spec: DashboardSpec): string {
       if (item.heading) lines.push(`- ${item.heading}`);
     } else if ("spec" in item) {
       const title = item.spec.title ?? item.spec.chartType;
-      lines.push(`- ${title}: ${item.spec.chartType} chart, ${item.spec.data.length} row(s)`);
+      const notes = item.spec.notes?.length ? ` Note: ${item.spec.notes.join(" ")}` : "";
+      lines.push(`- ${title}: ${item.spec.chartType} chart, ${item.spec.data.length} row(s)${notes}`);
     }
   }
   if (spec.notes?.length) lines.push(`Note: ${spec.notes.join(" ")}`);
@@ -163,6 +224,11 @@ export interface ViewDef {
   kind?: "chart" | "dashboard";
   /** Per-view input params as a zod raw shape. */
   params?: Record<string, z.ZodTypeAny>;
+  /**
+   * Produce the view's spec(s). For a DB-connected view, return a typed `ChartData` so the encoding
+   * rides driver types instead of a value sniff, e.g. `chart(await runSql("select ..."), { chartType:
+   * "line" })` — `chart`/`chartCell` accept a `ChartData` anywhere they accept raw rows.
+   */
   render: (args: Record<string, unknown>) => ViewResult | Promise<ViewResult>;
 }
 
@@ -177,9 +243,12 @@ export interface AddDashboardViewsOptions {
   renderDescription?: string;
 }
 
-/** A compact, bounded chart summary (the single-chart analogue of summarizeDashboard). */
+/** A compact, bounded chart summary (the single-chart analogue of summarizeDashboard). Appends the
+ *  chart's notes so encoding advisories (blank chart, coerced columns) reach the agent, not just the
+ *  human looking at the widget. */
 function chartSummary(spec: ChartSpec): string {
-  return `${spec.title ?? spec.chartType}: ${spec.chartType} chart, ${spec.data.length} row(s)`;
+  const notes = spec.notes?.length ? ` Note: ${spec.notes.join(" ")}` : "";
+  return `${spec.title ?? spec.chartType}: ${spec.chartType} chart, ${spec.data.length} row(s)${notes}`;
 }
 
 // Best-effort primitive type name across zod 3 (_def.typeName) and zod 4 (_zod.def.type), unwrapping
