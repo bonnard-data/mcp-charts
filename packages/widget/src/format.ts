@@ -27,6 +27,31 @@ export function fmt(v: unknown, f?: Format, currency?: string, fraction?: boolea
   return abbreviate ? (Number.isInteger(n) ? n.toLocaleString() : abbr(n)) : full(n);
 }
 
+// Compact a large magnitude to K/M/B/T notation (e.g. 8_000_000_000 -> "8B", 1_200_000 -> "1.2M").
+// Small magnitudes (< 1000) pass through with separators. Used for value-axis tick labels, where
+// full-digit labels ("8,000,000,000") crowd narrow cells and are hard to scan.
+export function compact(n: number): string {
+  const abs = Math.abs(n);
+  const unit = (x: number, u: string) => {
+    const s = (n / x).toFixed(1);
+    return `${s.endsWith(".0") ? s.slice(0, -2) : s}${u}`;
+  };
+  if (abs >= 1e12) return unit(1e12, "T");
+  if (abs >= 1e9) return unit(1e9, "B");
+  if (abs >= 1e6) return unit(1e6, "M");
+  if (abs >= 1e3) return unit(1e3, "K");
+  return Number.isInteger(n) ? n.toLocaleString("en-US") : n.toFixed(2);
+}
+
+// Value-axis tick formatter honoring the axis's declared format. Compacts large magnitudes
+// (currency and plain number) but never a percent axis — a percent tick is already small and
+// compacting "80%" to "80" would be wrong.
+export function fmtAxis(v: number, f?: Format, currency?: string): string {
+  if (f === "percent") return fmt(v, f);
+  if (f === "currency") return `${currency === "USD" || !currency ? "$" : currency + " "}${compact(v)}`;
+  return compact(v);
+}
+
 // Format an x-axis value: dates by granularity (e.g. "Apr 26"); everything else as-is.
 export function fmtX(v: unknown, granularity?: TimeGranularity): string {
   if (!granularity) return String(v);

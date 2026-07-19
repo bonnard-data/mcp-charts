@@ -23,6 +23,7 @@ const MIN_PIE_FRACTION = 0.02; // share cap: slices under 2% of the total fold i
 const MAX_BARS = 30; // categorical bars beyond this: keep the top N by value, drop the tail
 const MAX_SERIES = 12; // distinct series beyond this: keep the top N by total, fold rest into "Other"
 const MAX_POINTS = 2000; // line/area points beyond this: stride-downsample to bound the payload
+const MAX_SCATTER_POINTS = 2000; // scatter points beyond this: sample down to keep the cloud legible
 const FRACTION_MAX = 1.5; // percent columns: max |value| at or below this reads as a 0-1 fraction
 
 // Decide the percent scale ONCE per column. Guessing per value at render time flipped scale
@@ -466,6 +467,17 @@ function resolveScatter(
   const groupKey = groupField && groupField.kind !== "number" ? groupField.name : undefined;
   const pointLabel = fields.find((f) => f.role === "dimension" && f.name !== groupKey)?.name;
 
+  // Dense scatters overplot into an unreadable mass. Sample down to a cap (mirrors the line/area
+  // MAX_POINTS idiom) so the cloud stays legible; small scatters pass through untouched. Stride
+  // sampling preserves the overall shape/extent while thinning uniformly.
+  const scatterNotes: string[] = [];
+  if (rows.length > MAX_SCATTER_POINTS) {
+    const origLen = rows.length;
+    const step = Math.ceil(origLen / MAX_SCATTER_POINTS);
+    rows = rows.filter((_, i) => i % step === 0);
+    scatterNotes.push(`Showing a sample of ${rows.length} of ${origLen} points.`);
+  }
+
   const colMeta = (k: string, f = byName.get(k)) => ({
     key: k,
     label: f?.label ?? k,
@@ -508,7 +520,10 @@ function resolveScatter(
         ...(pointLabel && { [pointLabel]: r[pointLabel] }),
       };
     });
-    const notes = capped ? [`Grouped ${ordered.length - kept.size} smaller categories into "Other".`] : [];
+    const notes = [
+      ...scatterNotes,
+      ...(capped ? [`Grouped ${ordered.length - kept.size} smaller categories into "Other".`] : []),
+    ];
     return {
       chartType: "scatter",
       data,
@@ -547,6 +562,7 @@ function resolveScatter(
     yAxis,
     legend: false,
     ...(opts.title && { title: opts.title }),
+    ...(scatterNotes.length && { notes: scatterNotes }),
     columns,
   };
 }

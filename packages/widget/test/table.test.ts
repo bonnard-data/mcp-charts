@@ -20,4 +20,12 @@ describe("renderTable", () => {
     expect(html).toContain("2,400,000");
     expect(html).not.toContain("2.4M");
   });
+
+  it("renders an explicit empty-state (not a headerless empty table) for 0 rows", () => {
+    const emptySpec = { chartType: "table" as const, data: [], x: "", series: [], legend: false, columns: [] };
+    const html = renderTable(emptySpec);
+    expect(html).toContain("data-empty");
+    expect(html).toContain("No data");
+    expect(html).not.toContain("<table");
+  });
 });

@@ -1,6 +1,6 @@
 // Value formatter edge cases: percent auto-scaling and currency compaction.
 import { describe, it, expect } from "vitest";
-import { fmt, fmtX } from "../src/format.js";
+import { fmt, fmtX, compact, fmtAxis } from "../src/format.js";
 
 describe("fmt — percent auto-detect", () => {
   it("treats a fraction (<=1) as a ratio and scales to %", () => {
@@ -35,6 +35,29 @@ describe("fmt — abbreviate=false (tables want exact numbers)", () => {
   it("still abbreviates by default (charts/axes unchanged)", () => {
     expect(fmt(1_234_567.5)).toBe("1.2M"); // non-integer abbreviates
     expect(fmt(2_400_000, "currency", "USD")).toBe("$2.4M"); // currency abbreviates
+  });
+});
+
+describe("compact — large-magnitude axis notation", () => {
+  it("compacts billions, millions, thousands (trailing .0 dropped)", () => {
+    expect(compact(8_000_000_000)).toBe("8B");
+    expect(compact(1_200_000)).toBe("1.2M");
+    expect(compact(3_400_000)).toBe("3.4M");
+    expect(compact(1_500)).toBe("1.5K");
+    expect(compact(2_000_000_000_000)).toBe("2T");
+  });
+  it("leaves small magnitudes as exact numbers", () => {
+    expect(compact(6)).toBe("6");
+    expect(compact(150)).toBe("150");
+  });
+});
+
+describe("fmtAxis — format-aware compaction", () => {
+  it("prefixes a currency symbol on a large currency axis", () => {
+    expect(fmtAxis(8_000_000_000, "currency", "USD")).toBe("$8B");
+  });
+  it("never compacts a percent axis", () => {
+    expect(fmtAxis(80, "percent")).toBe("80.0%");
   });
 });
 

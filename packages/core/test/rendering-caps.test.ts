@@ -30,10 +30,21 @@ describe("high-cardinality caps (rendering invariants)", () => {
     expect(spec.data.length).toBe(1000);
   });
 
-  it("scatter is uncapped: 1000 points all pass through (documents the missing guard)", () => {
+  it("scatter passes small clouds through unchanged (1000 < 2000, no cap, no note)", () => {
     const rows = Array.from({ length: 1000 }, (_, i) => ({ x: i, y: (i * 37) % 100 }));
     const spec = chart(rows, { chartType: "scatter" });
     expect(spec.data.length).toBe(1000);
+    expect(spec.notes?.some((m) => /sample of/.test(m))).toBeFalsy();
+  });
+
+  it("scatter caps/samples above 2000 points and notes the sample", () => {
+    for (const n of [2001, 5000, 10000]) {
+      const rows = Array.from({ length: n }, (_, i) => ({ x: i, y: (i * 37) % 100 }));
+      const spec = chart(rows, { chartType: "scatter" });
+      expect(spec.data.length).toBeLessThanOrEqual(2000);
+      expect(spec.data.length).toBeGreaterThan(0);
+      expect(spec.notes?.some((m) => new RegExp(`sample of \\d+ of ${n} points`).test(m))).toBe(true);
+    }
   });
 
   it("pivot series cap: >12 distinct series fold into Other", () => {

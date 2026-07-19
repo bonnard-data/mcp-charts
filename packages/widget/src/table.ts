@@ -3,7 +3,14 @@
 import type { ChartSpec, ColumnSpec } from "@bonnard/mcp-charts";
 import { fmt, esc } from "./format.js";
 
+// A 0-row result is a valid "no data" state, not a broken chart. Render an explicit, theme-aware
+// empty-state marker instead of a headerless empty <table> (which reads as a blank white area).
+export function renderEmptyState(): string {
+  return `<div class="empty" data-empty>No data</div>`;
+}
+
 export function renderTable(spec: ChartSpec): string {
+  if (spec.data.length === 0) return renderEmptyState();
   const cols: ColumnSpec[] = spec.columns?.length
     ? spec.columns
     : Object.keys(spec.data[0] ?? {}).map((k) => ({ key: k, label: k }));
