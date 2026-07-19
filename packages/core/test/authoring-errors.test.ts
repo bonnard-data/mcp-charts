@@ -46,29 +46,39 @@ describe("encode mistakes", () => {
   // E1: typo'd encode.x is the ONLY mapping -> no x survives -> degrades to a table, but a NOTE
   // names the bad column. note-on-spec.
   it("E1 typo'd encode.x -> table + 'Ignored unknown encode column' note", () => {
-    const rows = [{ month: "2026-01", revenue: 10 }, { month: "2026-02", revenue: 20 }];
+    const rows = [
+      { month: "2026-01", revenue: 10 },
+      { month: "2026-02", revenue: 20 },
+    ];
     const { spec } = run(() => chart(rows, { encode: { x: "moneth", y: "revenue" } }));
     expect(spec!.chartType).toBe("table");
     expect(spec!.notes?.some((n) => /Ignored unknown encode column "moneth"/.test(n))).toBe(true);
   });
 
-  // E2: encode.y names a column not present in the rows; the valid encode.x still plots. A NOTE
-  // names the bad column (good) — BUT the produced spec ALSO keeps a phantom "profit" series (yNames
-  // trusts the raw encode.y list), so the bar chart carries a series key that maps to no data. The
-  // note is the only signal that the series is empty. note-on-spec (with a phantom-series wrinkle).
-  it("E2 encode column absent from rows -> note + phantom 'profit' series", () => {
-    const rows = [{ region: "EU", sales: 10 }, { region: "US", sales: 20 }];
+  // E2 (FIXED): encode.y names a column not present in the rows; the valid encode.x still plots. The
+  // phantom "profit" series is now DROPPED (it was already flagged as ignored), so the spec and the
+  // note agree: no series key without a backing column. With no measure left, the zero-series guard
+  // also fires. note-on-spec (two aligned notes, no phantom series).
+  it("E2 encode column absent from rows -> ignored note, no phantom series, zero-series note", () => {
+    const rows = [
+      { region: "EU", sales: 10 },
+      { region: "US", sales: 20 },
+    ];
     const { spec } = run(() => chart(rows, { encode: { x: "region", y: "profit" } }));
     expect(spec!.chartType).toBe("bar");
-    expect(keys(spec!)).toEqual(["profit"]); // phantom series: named, but no column backs it
+    expect(keys(spec!)).toEqual([]); // no phantom series
     expect(spec!.notes?.some((n) => /Ignored unknown encode column "profit"/.test(n))).toBe(true);
+    expect(spec!.notes?.some((n) => /No measure column to plot/.test(n))).toBe(true);
   });
 
   // E3: x/y swapped — dev put the measure on x and the dimension on y. Both columns exist, so NO
   // note fires; the library dutifully plots a "region" series over a numeric "sales" x. The chart
   // is nonsense (a string measure), and nothing tells the author. SILENT-WRONG.
   it("E3 swapped x/y -> renders nonsense, no note", () => {
-    const rows = [{ region: "EU", sales: 10 }, { region: "US", sales: 20 }];
+    const rows = [
+      { region: "EU", sales: 10 },
+      { region: "US", sales: 20 },
+    ];
     const { spec } = run(() => chart(rows, { encode: { x: "sales", y: "region" } }));
     expect(spec!.chartType).toBe("bar");
     expect(spec!.x).toBe("sales"); // measure used as the axis
@@ -81,16 +91,19 @@ describe("encode mistakes", () => {
 // 2. CHART-TYPE vs DATA MISMATCH
 // =============================================================================================
 describe("chartType vs data mismatch", () => {
-  // C1: pie forced onto 3 measures with no dimension. The all-measures path promotes the
+  // C1 (SIGNALLED): pie forced onto 3 measures with no dimension. The all-measures path promotes the
   // lowest-cardinality measure ("a") to the x/label, then plots b AND c as slices of a multi-series
-  // pie — meaningless. No note. SILENT-WRONG.
-  it("C1 pie with 3 measures / no dimension -> arbitrary slice, no note", () => {
-    const rows = [{ a: 1, b: 2, c: 3 }, { a: 4, b: 5, c: 6 }];
+  // pie. The forced-type precondition guard now NOTES the multi-measure pie. note-on-spec.
+  it("C1 pie with 3 measures / no dimension -> multi-slice + precondition note", () => {
+    const rows = [
+      { a: 1, b: 2, c: 3 },
+      { a: 4, b: 5, c: 6 },
+    ];
     const { spec } = run(() => chart(rows, { chartType: "pie" }));
     expect(spec!.chartType).toBe("pie");
     expect(spec!.x).toBe("a");
-    expect(keys(spec!)).toEqual(["b", "c"]); // two "series" on a pie: nonsense
-    expect(spec!.notes ?? []).toEqual([]); // SILENT-WRONG
+    expect(keys(spec!)).toEqual(["b", "c"]);
+    expect(spec!.notes?.some((n) => /A pie needs one category \+ one measure/.test(n))).toBe(true);
   });
 
   // C2: scatter with a single numeric column. The scatter branch requires two numeric columns and
@@ -101,27 +114,34 @@ describe("chartType vs data mismatch", () => {
     expect(threw).toMatch(/scatter chart needs two numeric columns/);
   });
 
-  // C3: line over a purely categorical x. The library honors the forced type and draws a line
-  // connecting categories (A-B-C). Arguably wrong (a line implies an orderable axis), but a
-  // defensible "you asked for line". No note. Judgment call -> classified SILENT-WRONG in the map.
-  it("C3 line with categorical x -> line over categories, no note", () => {
-    const rows = [{ cat: "A", v: 1 }, { cat: "B", v: 2 }, { cat: "C", v: 3 }];
+  // C3 (SIGNALLED): line over a purely categorical x. The library honors the forced type and draws a
+  // line connecting categories (A-B-C), but now NOTES that a line implies an order the categories
+  // may not have and suggests a bar. note-on-spec (the honored-forced-type is kept).
+  it("C3 line with categorical x -> line over categories + precondition note", () => {
+    const rows = [
+      { cat: "A", v: 1 },
+      { cat: "B", v: 2 },
+      { cat: "C", v: 3 },
+    ];
     const { spec } = run(() => chart(rows, { chartType: "line" }));
     expect(spec!.chartType).toBe("line");
     expect(spec!.x).toBe("cat");
-    expect(spec!.notes ?? []).toEqual([]); // SILENT-WRONG (judgment call)
+    expect(spec!.notes?.some((n) => /implies an order that may not exist/.test(n))).toBe(true);
   });
 
-  // C4: funnel with two measures / no dimension. The all-measures promotion makes "a" a dimension,
-  // so the funnel treats a's values as stage labels and "b" as the value. Structurally valid, but
-  // if the dev meant two metrics it is wrong. No note. SILENT-WRONG.
-  it("C4 funnel with wrong shape (two measures) -> uses a as stages, no note", () => {
-    const rows = [{ a: 1, b: 2 }, { a: 3, b: 4 }];
+  // C4 (SIGNALLED): funnel with two measures / no dimension. The all-measures promotion makes "a" a
+  // dimension, so the funnel treats a's values as stage labels and "b" as the value. The precondition
+  // guard now NOTES that only measures were supplied and a's values became the stages. note-on-spec.
+  it("C4 funnel with wrong shape (two measures) -> uses a as stages + precondition note", () => {
+    const rows = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+    ];
     const { spec } = run(() => chart(rows, { chartType: "funnel" }));
     expect(spec!.chartType).toBe("funnel");
     expect(spec!.x).toBe("a");
     expect(keys(spec!)).toEqual(["b"]);
-    expect(spec!.notes ?? []).toEqual([]); // SILENT-WRONG
+    expect(spec!.notes?.some((n) => /A funnel needs a stage\/label column and one measure/.test(n))).toBe(true);
   });
 
   // C5: waterfall with a single row -> throws (needs a start + one step). runtime-error (good).
@@ -138,7 +158,10 @@ describe("chartType vs data mismatch", () => {
 
   // C7: table is the always-ok raw-grid baseline. correct.
   it("C7 table baseline -> passthrough grid", () => {
-    const rows = [{ region: "EU", sales: 10 }, { region: "US", sales: 20 }];
+    const rows = [
+      { region: "EU", sales: 10 },
+      { region: "US", sales: 20 },
+    ];
     const { spec } = run(() => chart(rows, { chartType: "table" }));
     expect(spec!.chartType).toBe("table");
     expect(spec!.data.length).toBe(2);
@@ -154,7 +177,11 @@ describe("type inference traps", () => {
   // numeric-grouping path rescues it: the lowest-cardinality numeric becomes the x dimension, so
   // year ends up as the x-axis of a bar chart. correct (the intended save).
   it("T1 {year, revenue} -> year rescued as x", () => {
-    const rows = [{ year: 2021, revenue: 10 }, { year: 2022, revenue: 20 }, { year: 2023, revenue: 30 }];
+    const rows = [
+      { year: 2021, revenue: 10 },
+      { year: 2022, revenue: 20 },
+      { year: 2023, revenue: 30 },
+    ];
     const { spec } = run(() => chart(rows));
     expect(spec!.chartType).toBe("bar");
     expect(spec!.x).toBe("year");
@@ -164,63 +191,86 @@ describe("type inference traps", () => {
   // T2: {store_id, sales}. Same numeric-grouping rescue: store_id (lower cardinality tie -> first
   // column) becomes x. Sensible for THIS data, but note it is a heuristic, not a guarantee. correct.
   it("T2 {store_id, sales} -> store_id rescued as x", () => {
-    const rows = [{ store_id: 101, sales: 10 }, { store_id: 102, sales: 20 }, { store_id: 103, sales: 30 }];
+    const rows = [
+      { store_id: 101, sales: 10 },
+      { store_id: 102, sales: 20 },
+      { store_id: 103, sales: 30 },
+    ];
     const { spec } = run(() => chart(rows));
     expect(spec!.x).toBe("store_id");
     expect(keys(spec!)).toEqual(["sales"]);
   });
 
-  // T3: numeric-string measure ("1234"). sniffKind sees a string -> the WHOLE column is typed
-  // dimension, not measure. So {region, sales:"1234"} has TWO dimensions and ZERO measures: the bar
-  // chart has an empty series and plots nothing. No note. SILENT-WRONG (a blank chart).
-  it("T3 numeric-string measure -> typed as dimension, EMPTY series, no note", () => {
-    const rows = [{ region: "EU", sales: "1234" }, { region: "US", sales: "5678" }];
+  // T3 (RECOVERED): numeric-string measure ("1234"). Inference now recovers a string column whose
+  // values are all numeric strings (and not year-like) to a NUMBER measure, so resolve's
+  // measure-coercion plots it. The chart renders `sales` as a real bar series, and an advisory note
+  // records that the column arrived as strings and was coerced. note-on-spec (advisory, not silent).
+  it("T3 numeric-string measure -> recovered to measure, renders + advisory note", () => {
+    const rows = [
+      { region: "EU", sales: "1234" },
+      { region: "US", sales: "5678" },
+    ];
     const fields = inferFields({ rows });
-    expect(fields.find((f) => f.name === "sales")!.role).toBe("dimension");
+    expect(fields.find((f) => f.name === "sales")!.role).toBe("measure");
     const { spec } = run(() => chart(rows));
-    expect(keys(spec!)).toEqual([]); // nothing plotted
-    expect(spec!.notes ?? []).toEqual([]); // SILENT-WRONG
+    expect(keys(spec!)).toEqual(["sales"]); // plotted, not blank
+    expect(spec!.data.map((r) => r.sales)).toEqual([1234, 5678]); // coerced to numbers
+    expect(spec!.notes?.some((n) => /arrived as numbers stored as strings/.test(n))).toBe(true);
   });
 
-  // T4: date as a string in an unusual format ("01/15/2026"). sniffTimeGranularity only recognizes
-  // ISO-ish shapes, so this is typed a plain string DIMENSION (not time). It renders as a bar over
-  // categories in SOURCE order (no chronological sort). No note. SILENT-WRONG (unsorted "dates").
-  it("T4 date-as-string unusual format -> treated as category, source order, no note", () => {
-    const rows = [{ d: "02/15/2026", v: 2 }, { d: "01/15/2026", v: 1 }];
+  // T4 (SIGNALLED): date as a string in an unusual format ("01/15/2026"). sniffTimeGranularity only
+  // recognizes ISO-ish shapes, so this is typed a plain string DIMENSION (not time) and rendered as
+  // a bar over categories in SOURCE order (no chronological sort — MM/DD vs DD/MM is ambiguous, so
+  // we do NOT parse). The loose-date guard now NOTES it and points at ISO dates. note-on-spec.
+  it("T4 date-as-string unusual format -> category, source order, loose-date note", () => {
+    const rows = [
+      { d: "02/15/2026", v: 2 },
+      { d: "01/15/2026", v: 1 },
+    ];
     const fields = inferFields({ rows });
     expect(fields.find((f) => f.name === "d")!.kind).toBe("string");
     const { spec } = run(() => chart(rows));
     expect(spec!.chartType).toBe("bar");
-    expect(spec!.data.map((r) => r.d)).toEqual(["02/15/2026", "01/15/2026"]); // NOT sorted
-    expect(spec!.notes ?? []).toEqual([]); // SILENT-WRONG
+    expect(spec!.data.map((r) => r.d)).toEqual(["02/15/2026", "01/15/2026"]); // NOT sorted (unparsed)
+    expect(spec!.notes?.some((n) => /looks like non-ISO dates/.test(n))).toBe(true);
   });
 
   // T5: a boolean column as x. It types as boolean -> dimension, and resolve normalizes true/false
   // to "Yes"/"No" for the axis. Sensible. correct.
   it("T5 boolean column -> Yes/No axis", () => {
-    const rows = [{ active: true, v: 1 }, { active: false, v: 2 }];
+    const rows = [
+      { active: true, v: 1 },
+      { active: false, v: 2 },
+    ];
     const { spec } = run(() => chart(rows));
     expect(spec!.x).toBe("active");
     expect(spec!.data.map((r) => r.active).sort()).toEqual(["No", "Yes"]);
   });
 
-  // T6: an all-null column. sniffKind never sees a non-null value -> defaults to "string" ->
-  // dimension. So {region, val:null} becomes two dimensions, no measure: empty series. No note.
-  // SILENT-WRONG.
-  it("T6 all-null column -> string dimension, empty series, no note", () => {
-    const rows = [{ region: "EU", val: null }, { region: "US", val: null }];
+  // T6 (SIGNALLED): an all-null column. sniffKind never sees a non-null value -> defaults to
+  // "string" -> dimension. So {region, val:null} becomes two dimensions, no measure: empty series.
+  // The zero-series guard now NOTES the blank chart instead of leaving it silent. note-on-spec.
+  it("T6 all-null column -> string dimension, empty series, zero-series note", () => {
+    const rows = [
+      { region: "EU", val: null },
+      { region: "US", val: null },
+    ];
     const fields = inferFields({ rows });
     expect(fields.find((f) => f.name === "val")!.role).toBe("dimension");
     const { spec } = run(() => chart(rows));
-    expect(keys(spec!)).toEqual([]); // SILENT-WRONG
-    expect(spec!.notes ?? []).toEqual([]);
+    expect(keys(spec!)).toEqual([]);
+    expect(spec!.notes?.some((n) => /No measure column to plot/.test(n))).toBe(true);
   });
 
   // T7: a mixed-type x column (numbers and a string). Consensus sniffing sees disagreement -> types
   // it "string" (dimension). The measure v still plots; x is treated as categories. Reasonable
   // fallback, and the measure is intact. correct (defensive).
   it("T7 mixed-type x column -> string dimension, measure intact", () => {
-    const rows = [{ x: 1, v: 10 }, { x: "two", v: 20 }, { x: 3, v: 30 }];
+    const rows = [
+      { x: 1, v: 10 },
+      { x: "two", v: 20 },
+      { x: 3, v: 30 },
+    ];
     const fields = inferFields({ rows });
     expect(fields.find((f) => f.name === "x")!.kind).toBe("string");
     const { spec } = run(() => chart(rows));
@@ -230,7 +280,11 @@ describe("type inference traps", () => {
   // T8: a dimension that is entirely one repeated value. Every row shares the same x, so the
   // unaggregated-duplicate path SUMS them into a single bar and emits a note. note-on-spec.
   it("T8 single repeated dimension value -> summed to one bar + note", () => {
-    const rows = [{ region: "EU", v: 1 }, { region: "EU", v: 2 }, { region: "EU", v: 3 }];
+    const rows = [
+      { region: "EU", v: 1 },
+      { region: "EU", v: 2 },
+      { region: "EU", v: 3 },
+    ];
     const { spec } = run(() => chart(rows));
     expect(spec!.data.length).toBe(1);
     expect(spec!.notes?.some((n) => /Summed 2 row\(s\) that shared the same region/.test(n))).toBe(true);
@@ -292,7 +346,10 @@ describe("fields / encode escape hatches", () => {
   // F1: declaring fields fixes a bad inference. {year, revenue} with year declared as a dimension
   // pins it as the x-axis explicitly (not relying on the numeric-grouping heuristic). correct.
   it("F1 fields override -> year pinned as dimension", () => {
-    const rows = [{ year: 2021, revenue: 10 }, { year: 2022, revenue: 20 }];
+    const rows = [
+      { year: 2021, revenue: 10 },
+      { year: 2022, revenue: 20 },
+    ];
     const { spec } = run(() =>
       chart(rows, {
         fields: [
@@ -305,13 +362,17 @@ describe("fields / encode escape hatches", () => {
     expect(keys(spec!)).toEqual(["revenue"]);
   });
 
-  // F2: a WRONG fields declaration. Declaring revenue as a string dimension makes the measure vanish
-  // -> empty series, a blank chart, no note. The escape hatch is trusted completely. SILENT-WRONG.
-  it("F2 wrong fields declaration -> measure lost, empty series, no note", () => {
-    const rows = [{ region: "EU", revenue: 10 }, { region: "US", revenue: 20 }];
+  // F2 (SIGNALLED): a WRONG fields declaration. Declaring revenue as a string dimension makes the
+  // measure vanish -> empty series. The escape hatch is still trusted verbatim (the declaration
+  // wins), but the zero-series guard now NOTES the resulting blank chart. note-on-spec.
+  it("F2 wrong fields declaration -> measure lost, empty series, zero-series note", () => {
+    const rows = [
+      { region: "EU", revenue: 10 },
+      { region: "US", revenue: 20 },
+    ];
     const { spec } = run(() => chart(rows, { fields: [{ name: "revenue", role: "dimension", kind: "string" }] }));
-    expect(keys(spec!)).toEqual([]); // SILENT-WRONG
-    expect(spec!.notes ?? []).toEqual([]);
+    expect(keys(spec!)).toEqual([]);
+    expect(spec!.notes?.some((n) => /No measure column to plot/.test(n))).toBe(true);
   });
 });
 
@@ -433,7 +494,7 @@ describe("TS-error boundary (compiled by tsc, asserted structurally here)", () =
     chart(rows, { fields: [{ name: "sales", role: "metric" }] });
 
     // NOT a TS-error: a data-level mistake. Numeric-string values satisfy `unknown`, so tsc is
-    // silent — this is exactly why T3 is a runtime silent-wrong, not an author-time catch.
+    // silent — inference recovers T3 at runtime (see the type-inference traps), not at author time.
     const numericStrings: Record<string, unknown>[] = [{ region: "EU", sales: "1234" }];
     chart(numericStrings); // compiles fine
 

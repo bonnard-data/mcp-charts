@@ -12,6 +12,30 @@ function isScalar(v: unknown): boolean {
   return v == null || SCALAR_TYPES.has(typeof v) || v instanceof Date;
 }
 
+/** A value that is a number stored as a string (e.g. "1234", "-9.5") — the classic driver footgun. */
+export function isNumericString(v: unknown): boolean {
+  return typeof v === "string" && NUMERIC_STRING.test(v);
+}
+
+/** A 4-digit value (as string or number) in a plausible year range — a legitimate string/number
+ *  ambiguity we must NOT coerce to a measure. Shares the 1900-2100 window with sniffTimeGranularity
+ *  so recovery, inference, and warnUntypedColumns agree on what "year-like" means. */
+export function isYearLike(v: unknown): boolean {
+  const s = String(v);
+  if (!/^\d{4}$/.test(s)) return false;
+  const y = Number(s);
+  return y >= 1900 && y <= 2100;
+}
+
+/** Non-null sampled values are ALL numeric strings and NONE is year-like: safe to treat as a
+ *  number column. Returns false for an empty sample. Used by both warnUntypedColumns (advisory)
+ *  and inference recovery (typing) so behavior matches. */
+export function allNumericStrings(values: unknown[]): boolean {
+  const vals = values.filter((v) => v != null);
+  if (vals.length === 0) return false;
+  return vals.every(isNumericString) && !vals.every(isYearLike);
+}
+
 /** Generic shape check: the data source must return rows as an array of flat objects. */
 export function validateRowsShape(rows: unknown): asserts rows is Record<string, unknown>[] {
   if (!Array.isArray(rows)) {
@@ -45,11 +69,9 @@ export function warnUntypedColumns(data: ChartData, sample = 50): string[] {
     const vals = rows.map((r) => r[c]).filter((v) => v != null);
     if (vals.length === 0) continue;
     // Skip all-4-digit columns: a bare year is a legitimate string/number ambiguity we must not force.
-    const numericStrings = vals.every((v) => typeof v === "string" && NUMERIC_STRING.test(v));
-    const yearish = vals.every((v) => /^\d{4}$/.test(String(v)));
-    if (numericStrings && !yearish) {
+    if (allNumericStrings(vals)) {
       out.push(
-        `Column "${c}" holds numbers stored as strings; declare its kind or normalize the cells, else it charts as a category.`,
+        `Column "${c}" arrived as numbers stored as strings; coerced to numbers so it can be plotted. Declare its kind or return numbers to silence this.`,
       );
     } else if (vals.some((v) => typeof v === "object" && !(v instanceof Date))) {
       out.push(`Column "${c}" holds objects (a driver-wrapped value?); normalize to a scalar or declare its fields.`);

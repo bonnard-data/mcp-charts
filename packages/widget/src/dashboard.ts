@@ -46,14 +46,22 @@ export function renderTextBlock(t: TextBlock): string {
   return `${heading}<div class="text-body">${esc(t.text)}</div>`;
 }
 
+/** A chart's advisories as a muted `.cell-notes` block (blank chart, coerced columns, capped
+ *  categories), or "" when there are none. Shared by the dashboard grid and the single-chart path
+ *  so a chart's notes reach the human on every surface, not just the agent text. */
+export function renderChartNotes(spec: ChartSpec): string {
+  return spec.notes?.length ? `<div class="cell-notes">${esc(spec.notes.join(" "))}</div>` : "";
+}
+
 /** Discriminate an item: a chart cell carries `spec`; otherwise dispatch on `type`. An unknown
  *  type renders a muted placeholder so an old widget never breaks on a newer item kind. */
 function renderItem(item: DashboardItem, index: number, columns: number): string {
   const span = cellSpan((item as { span?: number }).span, columns);
   const spanAttr = span > 1 ? ` data-span="${span}"` : "";
   if ("spec" in item) {
-    // Painted by main.ts; empty placeholder keyed by index.
-    return `<div class="cell chart" id="cell-${index}"${spanAttr}></div>`;
+    // main.ts paints the chart into #cell-<i>; a per-cell note (blank chart, coerced columns,
+    // capped categories) renders here as a sibling so the human sees it, mirroring dash-notes.
+    return `<div class="cell chart"${spanAttr}><div class="cell-chart" id="cell-${index}"></div>${renderChartNotes(item.spec)}</div>`;
   }
   if (item.type === "kpi") return `<div class="cell kpi"${spanAttr}>${renderKpi(item)}</div>`;
   if (item.type === "text") return `<div class="cell text-block"${spanAttr}>${renderTextBlock(item)}</div>`;

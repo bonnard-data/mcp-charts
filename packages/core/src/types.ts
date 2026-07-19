@@ -134,6 +134,20 @@ export interface ResolveOptions {
   horizontal?: boolean;
   /** Add reference lines: an average (computed) and/or a target (a value you pass). */
   reference?: { target?: number; average?: boolean };
+  /** Promote encoding-failure advisories (zero series, ignored encode column) from notes to
+   *  thrown errors. For authoring/CI: `explain(rows, { chartType, strict: true })` fails loudly
+   *  on a bad encoding instead of returning a blank chart. Default false (production posture). */
+  strict?: boolean;
+}
+
+/** Compact diagnostic from explain(): the inferred typing + resolved encoding, WITHOUT the render
+ *  payload. Lets a dev assert the encoding in a unit test / CI against sample or live rows. */
+export interface ChartExplanation {
+  fields: { name: string; kind: FieldKind; role: FieldRole }[];
+  chartType: ChartType;
+  x: string;
+  series: string[];
+  notes: string[];
 }
 
 // --- DashboardSpec: a grid of items (charts, KPIs, text). A separate render-ready contract
