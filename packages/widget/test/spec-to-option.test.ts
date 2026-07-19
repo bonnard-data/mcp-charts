@@ -99,9 +99,28 @@ describe("specToOption — adopted ECharts techniques", () => {
   });
 
   it("category axis is pinned to the edge (onZero:false) so negatives don't cut through it", () => {
-    const o = opt("bar-net-flow-negatives") as any;
+    // Short-labelled negatives stay vertical: category axis on x, pinned to the edge.
+    const o = specToOption(
+      resolveSpec(
+        {
+          rows: [
+            { c: "A", net: 100 },
+            { c: "B", net: -50 },
+            { c: "C", net: 30 },
+          ],
+        },
+        { chartType: "bar" },
+      ),
+    ) as any;
     expect(o.xAxis.axisLine.onZero).toBe(false);
     expect(o.xAxis.axisLabel.hideOverlap).toBe(true);
+  });
+
+  it("long-labelled negatives flip horizontal, category axis still edge-pinned", () => {
+    const o = opt("bar-net-flow-negatives") as any; // labels like "Northwind Trading" are long
+    expect(o.yAxis.type).toBe("category"); // flipped: categories on y
+    expect(o.yAxis.axisLine.onZero).toBe(false);
+    expect(o.yAxis.data.length).toBe(5); // all customers labelled, none dropped
   });
 });
 
@@ -215,6 +234,90 @@ describe("specToOption — tooltip XSS escaping (DB/agent values)", () => {
     const html = o.tooltip.formatter({ dataIndex: 0 });
     expect(html).toContain("&lt;img");
     expect(html).not.toContain("<img");
+  });
+});
+
+describe("specToOption — long category labels (no label dropped)", () => {
+  const longSpec = (n: number) =>
+    resolveSpec(
+      {
+        rows: Array.from({ length: n }, (_, i) => ({
+          category: `Very Long Category Name Number ${i + 1}`,
+          value: 100 - i,
+        })),
+      },
+      { chartType: "bar" },
+    );
+
+  it("flips a low-cardinality bar horizontal when labels are long (category on y-axis)", () => {
+    const o: any = specToOption(longSpec(4));
+    expect(o.yAxis.type).toBe("category"); // horizontal -> categories on y
+    expect(o.xAxis.type).toBe("value");
+    expect(o.yAxis.data.length).toBe(4); // every category present, none dropped
+  });
+
+  it("short labels keep the vertical layout (no regression)", () => {
+    const o: any = specToOption(
+      resolveSpec(
+        {
+          rows: [
+            { c: "A", v: 1 },
+            { c: "B", v: 2 },
+            { c: "C", v: 3 },
+          ],
+        },
+        { chartType: "bar" },
+      ),
+    );
+    expect(o.xAxis.type).toBe("category");
+    expect(o.xAxis.axisLabel.hideOverlap).toBe(true);
+  });
+
+  it("a hand-built vertical bar with long labels truncates + rotates rather than dropping", () => {
+    // Force vertical (a combo line pins horizontal:false) to exercise the truncate/rotate fallback.
+    const spec = {
+      chartType: "bar" as const,
+      x: "category",
+      horizontal: false,
+      data: [
+        { category: "Very Long Category Name Alpha", value: 10, trend: 10 },
+        { category: "Very Long Category Name Beta", value: 20, trend: 20 },
+      ],
+      series: [
+        { key: "value", label: "Value" },
+        { key: "trend", label: "Trend", type: "line" as const },
+      ],
+      legend: true,
+    };
+    const o: any = specToOption(spec);
+    expect(o.xAxis.type).toBe("category");
+    expect(o.xAxis.axisLabel.rotate).toBe(30);
+    expect(typeof o.xAxis.axisLabel.formatter).toBe("function");
+    expect(o.xAxis.axisLabel.formatter("Very Long Category Name Alpha")).toContain("…");
+    expect(o.xAxis.data.length).toBe(2); // both categories retained
+  });
+});
+
+describe("specToOption — compact large-number value axis", () => {
+  it("uses compact axis labels (8B) when the value axis magnitude is large", () => {
+    const o: any = specToOption(
+      resolveSpec(
+        {
+          rows: [
+            { q: "Q1", revenue: 8_000_000_000 },
+            { q: "Q2", revenue: 5_000_000_000 },
+          ],
+        },
+        { chartType: "bar" },
+      ),
+    );
+    expect(o.yAxis.axisLabel.formatter(8_000_000_000)).toBe("8B");
+  });
+
+  it("leaves small-magnitude charts on their existing labels (no regression)", () => {
+    const o: any = opt("bar-revenue-by-status");
+    // Small values keep the un-compacted formatter (never a B/T suffix on a modest axis).
+    expect(o.yAxis.axisLabel.formatter(1000)).not.toMatch(/[BT]$/);
   });
 });
 

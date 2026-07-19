@@ -37,3 +37,21 @@ categories, not silently) rather than parsed; forced pie/line/funnel shape misma
 precondition note; and a phantom `encode.y` series naming an absent column is dropped so the spec
 matches its "ignored" note. A shared `allNumericStrings` / `isYearLike` helper is exported from the
 validation module so recovery, `warnUntypedColumns`, and the year guard agree.
+
+**Rendering-quality fixes (Track A degenerate cases).** Only the degenerate cases change; normal
+charts render identically.
+
+- **Long category labels are no longer dropped.** A vertical categorical bar whose labels are long
+  now flips horizontal (labels read left-to-right, in full) even at low cardinality — extending the
+  existing high-cardinality flip. If a bar must stay vertical (a same-axis combo line), category
+  ticks truncate with an ellipsis + rotate so every bar keeps a visible label, with the full text on
+  the axis tooltip. Previously ECharts' `hideOverlap` silently dropped colliding labels, leaving
+  bars unidentifiable.
+- **Empty results show an explicit "No data" state** instead of a headerless empty `<table>` — on
+  the single-chart path, the table path, and each dashboard cell.
+- **Compact large-number axis labels.** Value axes (bar/line/area and scatter x/y) switch to compact
+  notation (`8B`, `1.2M`) once the axis magnitude is large, respecting currency (`$8B`) and never
+  compacting a percent axis. Full values remain in tooltips.
+- **Scatter now thins at scale.** Above 2000 points a scatter is stride-sampled to the cap with a
+  `"Showing a sample of N of M points."` note (mirroring the line/area downsample idiom), and dense
+  clouds render at reduced symbol opacity so overlap reads as density. Small scatters are unchanged.

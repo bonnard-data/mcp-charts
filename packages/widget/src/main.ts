@@ -5,7 +5,7 @@ import { App } from "@modelcontextprotocol/ext-apps";
 import type { ChartSpec, DashboardSpec } from "@bonnard/mcp-charts";
 import { echarts, themeName } from "./echarts-core.js";
 import { specToOption } from "./spec-to-option.js";
-import { renderTable } from "./table.js";
+import { renderTable, renderEmptyState } from "./table.js";
 import { renderDashboardShell, renderChartNotes, isChartSpec, isDashboardSpec } from "./dashboard.js";
 import { esc } from "./format.js";
 
@@ -55,12 +55,17 @@ function mountChart(el: HTMLElement, spec: ChartSpec) {
 
 function renderChart(spec: ChartSpec) {
   teardown();
+  const title = spec.title ? `<div class="title">${esc(spec.title)}</div>` : "";
+  // A 0-row result: show an explicit empty-state instead of an empty table or a blank plot.
+  if (spec.data.length === 0) {
+    root.innerHTML = `${title}${renderEmptyState()}${renderChartNotes(spec)}`;
+    return;
+  }
   // Tables are HTML, not a charting-library job.
   if (spec.chartType === "table") {
     root.innerHTML = `${renderTable(spec)}${renderChartNotes(spec)}`;
     return;
   }
-  const title = spec.title ? `<div class="title">${esc(spec.title)}</div>` : "";
   root.innerHTML = `${title}<div class="ec" id="ec"></div>${renderChartNotes(spec)}`;
   mountChart(document.getElementById("ec")!, spec);
 }
@@ -72,6 +77,10 @@ function renderDashboard(spec: DashboardSpec) {
     if (!("spec" in item)) return; // kpi/text cells are already final HTML
     const el = document.getElementById(`cell-${i}`);
     if (!el) return;
+    if (item.spec.data.length === 0) {
+      el.innerHTML = renderEmptyState();
+      return;
+    }
     if (item.spec.chartType === "table") {
       el.innerHTML = renderTable(item.spec);
       return;

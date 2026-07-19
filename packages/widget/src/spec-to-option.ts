@@ -11,7 +11,14 @@ import type {
   FunnelSeriesOption,
 } from "echarts/charts";
 import type { GridComponentOption, TooltipComponentOption, LegendComponentOption } from "echarts/components";
-import { esc, fmt, fmtX } from "./format.js";
+import { esc, fmt, fmtAxis, fmtX } from "./format.js";
+
+// A value axis switches to compact tick labels (8B, 1.2M) once its magnitude is large enough that
+// full-digit labels would crowd; small/normal charts keep their exact labels.
+const COMPACT_AXIS_MIN = 1e5;
+// Category labels longer than this are treated as "long": truncate + tooltip, and trigger a
+// horizontal flip on a vertical bar so every category stays identifiable.
+const LONG_LABEL_CHARS = 12;
 
 export type ECOption = ComposeOption<
   | BarSeriesOption
@@ -51,6 +58,18 @@ export function specToOption(spec: ChartSpec): ECOption {
 function scatterOption(spec: ChartSpec): ECOption {
   const xFmt = (v: unknown) => fmt(v, spec.xAxis?.format, spec.xAxis?.currency, spec.xAxis?.fraction);
   const yFmt = (v: unknown) => fmt(v, spec.yAxis?.format, spec.yAxis?.currency, spec.yAxis?.fraction);
+  // Compact large-magnitude scatter axes (revenue in the millions, etc.); small clouds unchanged.
+  const axisMax = (keys: string[]) =>
+    Math.max(0, ...spec.data.flatMap((r) => keys.map((k) => Math.abs(Number(r[k]) || 0))));
+  const seriesKeys = spec.series.map((s) => s.key);
+  const xAxisFmt =
+    axisMax([spec.x]) >= COMPACT_AXIS_MIN && spec.xAxis?.format !== "percent"
+      ? (v: number) => fmtAxis(v, spec.xAxis?.format, spec.xAxis?.currency)
+      : xFmt;
+  const yAxisFmt =
+    axisMax(seriesKeys) >= COMPACT_AXIS_MIN && spec.yAxis?.format !== "percent"
+      ? (v: number) => fmtAxis(v, spec.yAxis?.format, spec.yAxis?.currency)
+      : yFmt;
   const sizeKey = spec.size;
   const labelKey = spec.pointLabel;
   // One series per group when grouped by a category; each series reads its own (sparse) y column.
@@ -89,22 +108,28 @@ function scatterOption(spec: ChartSpec): ECOption {
     xAxis: {
       type: "value",
       ...(spec.xAxis?.label && { name: spec.xAxis.label, nameLocation: "middle", nameGap: 26 }),
-      axisLabel: { formatter: (v: number) => xFmt(v) },
+      axisLabel: { formatter: (v: number) => xAxisFmt(v) },
       axisLine: { onZero: false },
       splitLine: { show: true },
     },
     yAxis: {
       type: "value",
-      axisLabel: { formatter: (v: number) => yFmt(v) },
+      axisLabel: { formatter: (v: number) => yAxisFmt(v) },
     },
-    series: spec.series.map((s) => ({
-      name: s.label,
-      type: "scatter",
-      symbolSize,
-      itemStyle: { opacity: 0.8 },
-      emphasis: { focus: "self" as const },
-      data: points(s.key),
-    })) as ECOption["series"],
+    series: spec.series.map((s) => {
+      const data = points(s.key);
+      // Dense clouds overplot into a solid mass; drop symbol opacity so overlap reads as density
+      // and clusters stay legible. Sparse scatters keep full opacity.
+      const opacity = data.length > 400 ? 0.4 : data.length > 150 ? 0.6 : 0.8;
+      return {
+        name: s.label,
+        type: "scatter",
+        symbolSize,
+        itemStyle: { opacity },
+        emphasis: { focus: "self" as const },
+        data,
+      };
+    }) as ECOption["series"],
   };
 }
 
@@ -117,12 +142,23 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
   const cur = spec.yAxis?.currency;
   // stacked100 values are computed as 0-100 shares, so never fraction-scale them.
   const leftFmt = (v: unknown) => fmt(v, yfmt, cur, pct ? false : spec.yAxis?.fraction);
+  // Compact axis ticks (8B, 1.2M) kick in only when the left-axis magnitude is large; below that
+  // the exact labels read fine and normal charts stay unchanged.
+  const leftKeys = spec.series.filter((s) => s.axis !== "right").map((s) => s.key);
+  const leftMax = Math.max(0, ...spec.data.flatMap((r) => leftKeys.map((k) => Math.abs(Number(r[k]) || 0))));
+  const leftAxisFmt =
+    leftMax >= COMPACT_AXIS_MIN && yfmt !== "percent" ? (v: number) => fmtAxis(v, yfmt, cur) : leftFmt;
   const rightFmt = (v: unknown) =>
     fmt(v, spec.yAxisRight?.format, spec.yAxisRight?.currency, spec.yAxisRight?.fraction);
   // Numeric x on a line/area -> a linear (value) axis with [x,y] point data, so irregular
   // spacing is honest. Bars stay categorical; stacking keeps the category path too.
   const numericX = kind === "line" && !stacked && !!spec.xAxis?.numeric;
   const cats = spec.data.map((r) => fmtX(r[spec.x], spec.xAxis?.granularity));
+  // Long category labels don't fit under vertical bars; ECharts' hideOverlap then silently DROPS
+  // the colliding ones, leaving bars unidentifiable. On a vertical bar we flip horizontal (labels
+  // read left-to-right, full width); if we stay vertical we truncate-with-ellipsis + rotate so a
+  // label is always shown, with the full text on hover (see catAxis below).
+  const longLabels = kind === "bar" && cats.some((c) => c.length > LONG_LABEL_CHARS);
   // A combo line (e.g. a target/forecast) is an overlay, not part of the stack, so it must not
   // count toward the 100% total or it would shrink every real share.
   const stackKeys = spec.series.filter((s) => s.type !== "line").map((s) => s.key);
@@ -162,13 +198,25 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
   // xAxis/yAxis option types are nominally distinct in ECharts; build untyped + cast on assignment.
   const leftAxis: Record<string, unknown> = {
     type: "value",
-    ...(pct ? { max: 100, axisLabel: { formatter: (v: number) => `${v}%` } } : { axisLabel: { formatter: leftFmt } }),
+    ...(pct
+      ? { max: 100, axisLabel: { formatter: (v: number) => `${v}%` } }
+      : { axisLabel: { formatter: leftAxisFmt } }),
   };
   const rightAxis: Record<string, unknown> = {
     type: "value",
     axisLabel: { formatter: rightFmt },
     splitLine: { show: false }, // don't double up gridlines from both axes
   };
+  // Flip to horizontal when the spec asks (high cardinality) OR when labels are long — either way a
+  // vertical bar can't show them. Combo charts (a same-axis line) must stay vertical, so respect an
+  // explicit spec.horizontal===false and never flip a numeric-x bar.
+  const horizontal = !dual && kind === "bar" && (spec.horizontal === true || (spec.horizontal == null && longLabels));
+
+  // Vertical-fallback truncation: when long labels stay on the horizontal axis (a combo bar can't
+  // flip), cap width with an ellipsis + rotate so a label always shows; the FULL text stays on the
+  // axis tooltip. On a horizontal bar the categories sit on the roomy y-axis — no truncation needed.
+  const truncate = (s: string) => (s.length > LONG_LABEL_CHARS ? `${s.slice(0, LONG_LABEL_CHARS - 1)}…` : s);
+  const vertTrunc = longLabels && !horizontal;
   const catAxis: Record<string, unknown> = {
     type: "category",
     data: cats,
@@ -176,16 +224,18 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
     // Keep the category axis at the chart edge (not floating up to the zero line) so it never
     // cuts through bars when the data goes negative.
     axisLine: { onZero: false },
-    // Drop colliding category labels rather than letting them overlap into mush.
-    axisLabel: { hideOverlap: true },
+    axisLabel: vertTrunc
+      ? { rotate: 30, formatter: (v: string) => truncate(String(v)) }
+      : // Drop colliding category labels rather than letting them overlap into mush.
+        { hideOverlap: true },
+    // Full untruncated label on the axis tooltip so a truncated tick is never unidentifiable.
+    tooltip: { show: true },
   };
   const numericXAxis: Record<string, unknown> = {
     type: "value",
     axisLabel: { formatter: (v: number) => fmt(v, spec.xAxis?.format) },
     axisLine: { onZero: false },
   };
-
-  const horizontal = !dual && !!spec.horizontal && kind === "bar";
   const yAxis = horizontal ? { ...catAxis, inverse: true } : dual ? [leftAxis, rightAxis] : leftAxis;
 
   // Reference lines (target / average): a dashed markLine on the value axis, drawn once via series[0].
