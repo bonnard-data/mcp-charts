@@ -88,6 +88,39 @@ addDashboardTool(server, { name: "sales_dashboard", description: "Revenue overvi
 }));
 ```
 
+### Multiple views
+
+For a set of named views, `addDashboardViews` registers two tools over a registry: `explore_views`
+lists what's available (id, title, description, params) and `render_view` renders one by `view_id`
+(a single `ChartSpec` via `chart(rows, opts)`, or a composed `DashboardSpec`), binding the result to
+the widget. Each `ViewDef` can declare zod `params` that `render_view` validates per view.
+
+```ts
+import { addDashboardViews, chart, chartCell } from "@bonnard/mcp-charts";
+
+addDashboardViews(server, {
+  views: [
+    {
+      id: "revenue_trend",
+      title: "Revenue trend",
+      description: "Monthly revenue",
+      kind: "chart",
+      render: () => chart(monthlyRows, { chartType: "line", title: "Revenue by month" }),
+    },
+    {
+      id: "sales_overview",
+      title: "Sales overview",
+      description: "KPIs + charts, optionally per region",
+      kind: "dashboard",
+      params: { region: z.enum(["EU", "US", "APAC"]).optional() },
+      render: ({ region }) => buildDashboard(region),
+    },
+  ],
+});
+```
+
+See `examples/dashboard` for a five-view server.
+
 ## Warehouse adapters
 
 Skip writing `runSql` by hand. Each adapter wraps your driver and maps native column types to chart roles (dimension, measure, time):

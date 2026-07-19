@@ -1,18 +1,26 @@
-// Example: return a DashboardSpec from an MCP tool. The `sales_dashboard` tool composes KPIs +
-// charts + a text block into one grid; the embedded ui:// widget renders it as a dashboard.
+// Example: a multi-view dashboard surface over one MCP server. `explore_views` lists the available
+// views; `render_view` renders one by id (a single ChartSpec or a composed DashboardSpec) into the
+// embedded ui:// widget. Views mix single charts and dashboards across several chart types.
 //   pnpm install && pnpm start   (from the repo root: pnpm build first, so workspace:* has the exports)
 // Serves MCP over Streamable HTTP at /mcp; point a remote MCP client (Claude Desktop custom
 // connector, Cursor, or `npx @modelcontextprotocol/inspector`) at http://localhost:3000/mcp.
 //
-// No database here on purpose: a DashboardSpec can come from any tool. Chart cells are built with
-// chartCell(rows, opts), which infers the encoding from the raw rows via resolve().
+// No database here on purpose: a spec can come from any tool. Single charts are built with
+// chart(rows, opts); dashboard cells with chartCell(rows, opts). Both infer via resolve().
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { addDashboardTool, chartCell, type DashboardSpec } from "@bonnard/mcp-charts";
+import {
+  addDashboardViews,
+  chart,
+  chartCell,
+  type ChartSpec,
+  type DashboardSpec,
+  type ViewDef,
+} from "@bonnard/mcp-charts";
 
 // 1. In-memory data (in real life this is your warehouse / API / analytics store).
 type RegionRow = { region: string; revenue: number };
@@ -43,20 +51,24 @@ const ORDERS_BY_STATUS: StatusRow[] = [
 // Prior-period revenue, for the KPI delta.
 const PRIOR_TOTAL_REVENUE = 275_000;
 
-/** Compose the DashboardSpec for a region (or all regions when unset). */
-function buildDashboard(region?: string): DashboardSpec {
+const totalRevenue = (rows: RegionRow[]) => sum(rows.map((r) => r.revenue));
+const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
+const totalOrders = () => sum(ORDERS_BY_STATUS.map((o) => o.orders));
+
+/** Compose the sales-overview DashboardSpec for a region (or all regions when unset). */
+function buildSalesOverview(region?: string): DashboardSpec {
   const regionRows = region ? BY_REGION.filter((r) => r.region === region) : BY_REGION;
   const scale = region ? (regionRows[0]?.revenue ?? 0) / totalRevenue(BY_REGION) : 1;
 
   // When filtered to a region, scale the monthly/order figures so the tiles and charts agree.
   const monthly = MONTHLY.map((m) => ({ ...m, revenue: Math.round(m.revenue * scale) }));
   const totalRev = Math.round(totalRevenue(regionRows));
-  const totalOrders = Math.round(sum(ORDERS_BY_STATUS.map((o) => o.orders)) * scale);
+  const orders = Math.round(totalOrders() * scale);
   const priorRev = Math.round(PRIOR_TOTAL_REVENUE * scale);
 
   const scope = region ? `${region} region` : "all regions";
   return {
-    title: region ? `Sales Dashboard (${region})` : "Sales Dashboard",
+    title: region ? `Sales Overview (${region})` : "Sales Overview",
     columns: 2,
     items: [
       {
@@ -68,12 +80,7 @@ function buildDashboard(region?: string): DashboardSpec {
         delta: totalRev - priorRev,
         caption: "vs prior period",
       },
-      {
-        type: "kpi",
-        label: "Orders",
-        value: totalOrders,
-        caption: "this period",
-      },
+      { type: "kpi", label: "Orders", value: orders, caption: "this period" },
       chartCell(monthly, { chartType: "line", title: "Revenue by month", span: 2 }),
       chartCell(regionRows, { chartType: "bar", title: "Revenue by region" }),
       {
@@ -85,30 +92,90 @@ function buildDashboard(region?: string): DashboardSpec {
   };
 }
 
-const totalRevenue = (rows: RegionRow[]) => sum(rows.map((r) => r.revenue));
-const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
+/** A KPI-forward exec view: a row of KPI tiles plus one compact trend line. */
+function buildExecSummary(): DashboardSpec {
+  const totalRev = Math.round(totalRevenue(BY_REGION));
+  const orders = totalOrders();
+  const avgOrderValue = Math.round(totalRev / orders);
+  return {
+    title: "Executive Summary",
+    columns: 3,
+    items: [
+      {
+        type: "kpi",
+        label: "Total revenue",
+        value: totalRev,
+        format: "currency",
+        currency: "USD",
+        delta: totalRev - PRIOR_TOTAL_REVENUE,
+        caption: "vs prior period",
+      },
+      { type: "kpi", label: "Orders", value: orders, caption: "this period" },
+      {
+        type: "kpi",
+        label: "Avg order value",
+        value: avgOrderValue,
+        format: "currency",
+        currency: "USD",
+        caption: "revenue / orders",
+      },
+      chartCell(MONTHLY, { chartType: "line", title: "Revenue trend", span: 3 }),
+    ],
+  };
+}
 
-// 3. Build a fresh MCP server (widget resource + the sales_dashboard tool). One instance per
-// Streamable HTTP session, the standard sessioned pattern. addDashboardTool registers the widget
-// resource + the tool (outputSchema, widget _meta, result envelope, error handling).
+const buildRevenueTrend = (): ChartSpec => chart(MONTHLY, { chartType: "line", title: "Monthly revenue" });
+
+const buildRegionBreakdown = (): ChartSpec => chart(BY_REGION, { chartType: "pie", title: "Revenue by region" });
+
+const buildOrderFunnel = (): ChartSpec => chart(ORDERS_BY_STATUS, { chartType: "funnel", title: "Orders by status" });
+
+// 2. The views registry: single charts + dashboards, varied chart types.
+const VIEWS: ViewDef[] = [
+  {
+    id: "sales_overview",
+    title: "Sales overview",
+    description: "KPIs + revenue-by-month line + revenue-by-region bar + a summary, optionally per region",
+    kind: "dashboard",
+    params: { region: z.enum(["EU", "US", "APAC"]).optional() },
+    render: (args) => buildSalesOverview(args.region as string | undefined),
+  },
+  {
+    id: "exec_summary",
+    title: "Executive summary",
+    description: "A KPI-forward exec view: revenue, orders, avg order value, and a compact revenue trend",
+    kind: "dashboard",
+    render: () => buildExecSummary(),
+  },
+  {
+    id: "revenue_trend",
+    title: "Revenue trend",
+    description: "A line chart of monthly revenue",
+    kind: "chart",
+    render: () => buildRevenueTrend(),
+  },
+  {
+    id: "region_breakdown",
+    title: "Region breakdown",
+    description: "A pie chart of revenue by region",
+    kind: "chart",
+    render: () => buildRegionBreakdown(),
+  },
+  {
+    id: "order_funnel",
+    title: "Order funnel",
+    description: "A funnel chart of orders by status",
+    kind: "chart",
+    render: () => buildOrderFunnel(),
+  },
+];
+
+// 3. Build a fresh MCP server (widget resource + explore_views + render_view). One instance per
+// Streamable HTTP session, the standard sessioned pattern. addDashboardViews registers the widget
+// resource + both tools (discovery catalog + widget-bound render, error handling).
 function buildMcpServer(): McpServer {
   const server = new McpServer({ name: "example-dashboard", version: "0.1.0" });
-
-  addDashboardTool(
-    server,
-    {
-      name: "sales_dashboard",
-      title: "Sales dashboard",
-      description:
-        "Return a multi-chart sales dashboard (KPIs + charts + text) as a DashboardSpec. " +
-        "Pass `region` (EU / US / APAC) to scope it to one region.",
-      inputSchema: {
-        region: z.enum(["EU", "US", "APAC"]).optional().describe("Filter the dashboard to one region"),
-      },
-    },
-    (args: { region?: string }) => buildDashboard(args.region),
-  );
-
+  addDashboardViews(server, { views: VIEWS });
   return server;
 }
 
