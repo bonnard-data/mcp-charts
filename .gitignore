@@ -11,3 +11,8 @@ gallery.html
 
 # internal dev backlog — not for the public package repo
 NOTES.md
+
+.tracka-shots/
+.tracka-cases.json
+scripts/tracka-cases.mjs
+tracka-shots-tmp/
