@@ -49,6 +49,16 @@ const ORDERS_BY_STATUS: StatusRow[] = [
 // Prior-period revenue, for the KPI delta.
 const PRIOR_TOTAL_REVENUE = 275_000;
 
+// Long department names + multi-million values: exercises the long-label handling (the bar flips
+// horizontal so no label is dropped) and the compact large-number axis ($4M, not 4,200,000).
+const DEPARTMENT_SPEND: { department: string; spend: number }[] = [
+  { department: "Research and Development", spend: 4_200_000 },
+  { department: "Sales and Marketing Operations", spend: 3_800_000 },
+  { department: "Infrastructure and Platform Engineering", spend: 3_100_000 },
+  { department: "Customer Success and Support", spend: 2_600_000 },
+  { department: "General and Administrative", spend: 1_900_000 },
+];
+
 const totalRevenue = (rows: RegionRow[]) => sum(rows.map((r) => r.revenue));
 const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
 const totalOrders = () => sum(ORDERS_BY_STATUS.map((o) => o.orders));
@@ -128,6 +138,9 @@ const buildRegionBreakdown = (): ChartSpec => chart(BY_REGION, { chartType: "pie
 
 const buildOrderFunnel = (): ChartSpec => chart(ORDERS_BY_STATUS, { chartType: "funnel", title: "Orders by status" });
 
+const buildDepartmentSpend = (): ChartSpec =>
+  chart(DEPARTMENT_SPEND, { chartType: "bar", title: "Annual spend by department" });
+
 // 2. The views registry: single charts + dashboards, varied chart types.
 const VIEWS: ViewDef[] = [
   {
@@ -165,6 +178,13 @@ const VIEWS: ViewDef[] = [
     description: "A funnel chart of orders by status",
     kind: "chart",
     render: () => buildOrderFunnel(),
+  },
+  {
+    id: "department_spend",
+    title: "Department spend",
+    description: "A bar chart of annual spend by department (long labels + large values)",
+    kind: "chart",
+    render: () => buildDepartmentSpend(),
   },
 ];
 
