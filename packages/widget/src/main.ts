@@ -135,9 +135,20 @@ window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change",
 // all strings — so shipping it inert in the production bundle is safe.
 if (location.hash === "#harness") {
   window.addEventListener("message", (e) => {
-    const d = e.data as { type?: string; structuredContent?: unknown; text?: string } | null;
-    if (d?.type === "bonnard:harness-render") paint(d.structuredContent, d.text);
+    const d = e.data as {
+      type?: string;
+      structuredContent?: unknown;
+      text?: string;
+      theme?: "light" | "dark";
+    } | null;
+    if (d?.type === "bonnard:harness-render") {
+      if (d.theme === "light" || d.theme === "dark") applyTheme(d.theme);
+      paint(d.structuredContent, d.text);
+    }
   });
+  // Tell the harness we're (re)loaded so it re-feeds the current payload — this is what turns a
+  // Vite full-reload of this iframe (on a renderer source edit) into an HMR-like preview loop.
+  parent.postMessage({ type: "bonnard:harness-ready" }, "*");
 }
 
 paint(undefined);

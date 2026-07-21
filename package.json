@@ -18,6 +18,7 @@
     "test": "pnpm -r test",
     "check:exports": "pnpm -F @bonnard/mcp-charts check:exports",
     "dev": "pnpm -r --parallel dev",
+    "dev:harness": "pnpm -F @bonnard/mcp-charts-widget harness",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish"

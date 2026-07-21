@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bonnard widget dev harness</title>
+    <style>
+      :root {
+        --bg: #fafafa;
+        --panel: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --accent: #2563eb;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      .panel {
+        border-right: 1px solid var(--border);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: auto;
+      }
+      .panel h1 {
+        font-size: 14px;
+        margin: 0;
+        font-weight: 700;
+      }
+      .panel .sub {
+        font-size: 11px;
+        color: var(--muted);
+        margin: -6px 0 4px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      label {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      select,
+      button {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--fg);
+      }
+      button {
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      select {
+        flex: 1;
+      }
+      textarea {
+        flex: 1;
+        min-height: 240px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--fg);
+        resize: vertical;
+        tab-size: 2;
+      }
+      .err {
+        color: #dc2626;
+        font-size: 12px;
+        white-space: pre-wrap;
+        min-height: 16px;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .seg button {
+        border: 0;
+        border-radius: 0;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--accent);
+        color: #fff;
+      }
+      .stage {
+        position: relative;
+      }
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #fff;
+      }
+      html[data-theme="dark"] .stage {
+        background: #171717;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Bonnard widget dev harness</h1>
+      <div class="sub">Edits to the widget or core <code>resolve()</code> source hot-reload the preview.</div>
+
+      <div class="row">
+        <label>Mode</label>
+        <div class="seg" id="mode">
+          <button data-mode="data" aria-pressed="true">data + opts → resolve()</button>
+          <button data-mode="spec">raw spec</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="fixture">Example</label>
+        <select id="fixture"></select>
+      </div>
+
+      <div class="row">
+        <label>Theme</label>
+        <div class="seg" id="theme">
+          <button data-theme="light" aria-pressed="true">light</button>
+          <button data-theme="dark">dark</button>
+        </div>
+        <button class="primary" id="render">Render ⌘⏎</button>
+      </div>
+
+      <textarea id="editor" spellcheck="false"></textarea>
+      <div class="err" id="err"></div>
+    </div>
+    <div class="stage">
+      <iframe id="stage" src="./index.html#harness"></iframe>
+    </div>
+    <script type="module" src="./harness.ts"></script>
+  </body>
+</html>

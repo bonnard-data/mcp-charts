@@ -7,6 +7,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "harness": "vite --open /harness.html",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
