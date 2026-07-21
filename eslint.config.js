@@ -18,6 +18,13 @@ export default tseslint.config(
     ],
   },
   js.configs.recommended,
+  // Root dev scripts (Node ESM): give them the Node runtime globals.
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly", fetch: "readonly" },
+    },
+  },
   // Library source: recommended + opt-in type-aware rules that catch real bugs.
   {
     files: ["packages/*/src/**/*.ts", "examples/*/src/**/*.ts"],

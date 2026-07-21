@@ -20,16 +20,19 @@
     "dev": "pnpm -r --parallel dev",
     "dev:harness": "pnpm -F @bonnard/mcp-charts-widget harness",
     "dev:inspect": "bash scripts/dev-inspect.sh",
+    "uat": "tsx scripts/uat.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@bonnard/mcp-charts": "workspace:*",
     "@changesets/cli": "^2.27.9",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.4",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.61.1"
   }
