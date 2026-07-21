@@ -44,6 +44,8 @@ Core is at `0.1.2`; next publish is **0.2.0** (staged changesets: dashboard-spec
 
 ## Conventions
 Comments: limited and refined, only when needed; clarify non-obvious behavior, don't narrate
-decisions. Prefer clear names. No emojis, no em-dashes. Commit trailer:
+decisions. Prefer clear names. No emojis, no em-dashes. Prose for humans (docs, READMEs, changelog,
+marketing, UI copy): run the `house-voice` skill (house copy rules + removes AI writing tells,
+accuracy first). Commit trailer:
 `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Sole-dev workflow: short-lived
 branch -> review -> merge to `main` locally; no PRs.
