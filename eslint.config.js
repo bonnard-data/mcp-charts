@@ -13,14 +13,15 @@ export default tseslint.config(
       "**/node_modules/**",
       "packages/core/src/generated/**", // committed minified widget bundle
       "packages/core/scripts/**", // build .mjs
+      "packages/create-mcp-charts/template/**", // scaffold template (has placeholders)
       "**/*.config.{js,ts,mjs}",
       "eslint.config.js",
     ],
   },
   js.configs.recommended,
-  // Root dev scripts (Node ESM): give them the Node runtime globals.
+  // Node ESM tooling scripts (root dev scripts + the scaffold generator bin): Node runtime globals.
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "packages/create-mcp-charts/bin/**/*.mjs"],
     languageOptions: {
       globals: { process: "readonly", console: "readonly", fetch: "readonly" },
     },

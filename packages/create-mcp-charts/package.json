@@ -1,0 +1,25 @@
+{
+  "name": "@bonnard/create-mcp-charts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scaffold a minimal MCP server with agent-ready charts (@bonnard/mcp-charts). Run `npm create @bonnard/mcp-charts`.",
+  "license": "MIT",
+  "bin": {
+    "create-mcp-charts": "bin/index.mjs"
+  },
+  "files": [
+    "bin",
+    "template"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.0"
+  }
+}
