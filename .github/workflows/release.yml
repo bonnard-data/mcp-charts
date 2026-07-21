@@ -10,11 +10,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # commit the version bump + tags
-      pull-requests: write # open the "Version Packages" PR
+      contents: write # commit the version bump + push tags
       id-token: write # npm provenance
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
 
@@ -26,16 +27,28 @@ jobs:
 
       - run: pnpm install --no-frozen-lockfile
 
-      # With pending changesets, opens or updates a "Version Packages" PR that runs
-      # `changeset version`. With none (right after that PR merges), builds and publishes to npm.
-      - name: Changesets release
-        uses: changesets/action@v1
-        with:
-          version: pnpm run version-packages
-          publish: pnpm run release
-          commit: "chore: version packages"
-          title: "chore: version packages"
+      # Auto-publish on push (the org disallows Actions-created PRs, so no "Version Packages" PR).
+      - name: Detect pending changesets
+        id: cs
+        run: |
+          if [ -n "$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null)" ]; then
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Aggregate the changesets into one bump + changelog, publish to npm, then push the version
+      # commit and tags. The follow-up push has no changesets, so the re-triggered run is a no-op.
+      - name: Version, publish, tag
+        if: steps.cs.outputs.pending == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          pnpm changeset version
+          git add -A
+          git commit -m "chore: version packages"
+          pnpm release
+          git push --follow-tags origin main
