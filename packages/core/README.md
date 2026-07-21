@@ -1,6 +1,6 @@
 <h1 align="center">@bonnard/mcp-charts</h1>
 
-<p align="center">Interactive charts for your MCP server, in a few lines.</p>
+<p align="center">Interactive charts, dashboards, and certified views for your MCP server, in a few lines.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@bonnard/mcp-charts"><img src="https://img.shields.io/npm/v/@bonnard/mcp-charts" alt="npm version"></a>
@@ -9,10 +9,12 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bonnard-data/mcp-charts/main/assets/hero-bubble.png" alt="A chart rendered inside Claude from a visualize tool call" width="820">
+  Built by <a href="https://bonnard.dev">Bonnard</a> &middot; <a href="https://docs.bonnard.dev/mcp-charts/getting-started">Docs</a>
 </p>
 
-`@bonnard/mcp-charts` adds a `visualize` tool plus an embedded chart widget to any MCP server. The agent writes SQL, your database returns the rows, and the result renders as an interactive chart inside the host (Claude, ChatGPT, and other MCP Apps clients). You write no frontend code.
+`@bonnard/mcp-charts` adds interactive charts to any MCP server. Your agent asks for data, your
+database returns the rows, and the result renders as an interactive chart inside the host (Claude,
+ChatGPT, and other MCP Apps clients). You write no frontend code: one widget renders across every host.
 
 > Pre-1.0: the API may change before a 1.0 release.
 
@@ -22,7 +24,20 @@
 npm install @bonnard/mcp-charts
 ```
 
-## Quickstart
+## Two ways to add charts
+
+There are two shapes, depending on who chooses the query:
+
+- **Ad-hoc `visualize` (the agent writes SQL).** Add a generic `visualize` tool with `addCharts`. The
+  agent writes SQL against your warehouse and the rows render as a chart. Best for open-ended
+  exploration.
+- **Certified views (you author the queries).** Register named, reviewed views with
+  `addDashboardViews`, or a single dashboard with `addDashboardTool`. The agent picks a view instead of
+  writing SQL. Best for trusted, repeatable analytics.
+
+Both paths render through the same `ui://bonnard/chart` widget and the same encoding logic.
+
+## Quickstart: the `visualize` tool
 
 Call `addCharts` on your existing MCP server and give it a read-only query callback:
 
@@ -36,36 +51,149 @@ addCharts(server, {
 });
 ```
 
-That registers a `visualize` tool and a `ui://bonnard/chart` widget resource. The agent calls it with SQL; the rows render as a chart in the host, with a text fallback for non-widget clients.
+That registers a `visualize` tool and a `ui://bonnard/chart` widget resource. The agent calls it with
+SQL; the rows render as a chart in the host, with a text fallback for non-widget clients.
 
-## Why
-
-- **Grounded in real data.** Charts render the rows your query returned, not numbers the model typed into a tool call. No hallucinated figures.
-- **A few lines, no frontend.** One function, one widget that works across every MCP Apps host. You don't maintain per-client rendering code.
-- **Interactive, not static images.** Tooltips, legends, and axis formatting, native to the client.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/bonnard-data/mcp-charts/main/assets/interactive-waterfall.png" alt="Interactive waterfall chart with a hover tooltip, rendered in Claude" width="820">
-</p>
+Adapters ship for `postgres`, `bigquery`, `snowflake`, `databricks`, and `duckdb`. For an engine
+without one, build typed `ChartData` with `buildChartData` (or declare `fields` yourself) so
+numeric/temporal columns aren't inferred from raw driver values — see
+[Connecting a database](#connecting-a-database).
 
 ## Chart types
 
-Eight types, chosen automatically from the shape of your data or set explicitly: `bar`, `line`, `area`, `pie`, `scatter`, `funnel`, `waterfall`, `table`. Plus bar variants (stacked, grouped, 100% stacked, horizontal), dual-axis combos, bubble sizing, and reference lines. See the [chart types reference](https://docs.bonnard.dev/mcp-charts/chart-types).
+Eight types, chosen automatically from the shape of your data or set explicitly: `bar`, `line`,
+`area`, `pie`, `scatter`, `funnel`, `waterfall`, `table`. Plus bar variants (stacked, grouped, 100%
+stacked, horizontal), dual-axis combos, bubble sizing, and reference lines. See the
+[chart types reference](https://docs.bonnard.dev/mcp-charts/chart-types).
+
+## Dashboards
+
+Return a `DashboardSpec` (a grid of chart cells, KPI tiles, and text blocks) from your own tool.
+`chartCell` builds a cell from raw rows and `addDashboardTool` wires the widget, output schema, and
+result envelope the same way `addCharts` does:
+
+```ts
+import { addDashboardTool, chartCell } from "@bonnard/mcp-charts";
+
+addDashboardTool(server, { name: "sales_dashboard", description: "Revenue overview" }, () => ({
+  title: "Sales Dashboard",
+  columns: 2,
+  items: [
+    { type: "kpi", label: "Revenue", value: 336800, format: "currency", currency: "USD", delta: 61800 },
+    chartCell(monthlyRows, { chartType: "line", title: "Revenue by month", span: 2 }),
+    chartCell(regionRows, { chartType: "bar", title: "Revenue by region" }),
+    { type: "text", heading: "Summary", text: "Trending up, led by EU and US." },
+  ],
+}));
+```
+
+See the [dashboards guide](https://docs.bonnard.dev/mcp-charts/dashboards).
+
+### Multiple views
+
+For a set of named views, `addDashboardViews` registers two tools over a registry: `explore_views`
+lists what's available (id, title, description, params) and `render_view` renders one by `view_id`
+(a single `ChartSpec` via `chart(rows, opts)`, or a composed `DashboardSpec`), binding the result to
+the widget. Each `ViewDef` can declare zod `params` that `render_view` validates per view.
+
+```ts
+import { addDashboardViews, chart } from "@bonnard/mcp-charts";
+import { z } from "zod";
+
+addDashboardViews(server, {
+  views: [
+    {
+      id: "revenue_trend",
+      title: "Revenue trend",
+      description: "Monthly revenue",
+      kind: "chart",
+      render: () => chart(monthlyRows, { chartType: "line", title: "Revenue by month" }),
+    },
+    {
+      id: "sales_overview",
+      title: "Sales overview",
+      description: "KPIs + charts, optionally per region",
+      kind: "dashboard",
+      params: { region: z.enum(["EU", "US", "APAC"]).optional() },
+      render: ({ region }) => buildDashboard(region),
+    },
+  ],
+});
+```
+
+See `examples/dashboard` for a six-view server, and the
+[views guide](https://docs.bonnard.dev/mcp-charts/views).
+
+## Connecting a database
+
+When you build views from live, unseen data, prefer a **typed source**. An adapter (or
+`buildChartData`) hands `resolve()` a `ChartData` with column types from your driver, so the encoding
+is decided from types, not sniffed from a sample:
+
+```ts
+import { chart, buildChartData } from "@bonnard/mcp-charts";
+
+// A typed ChartData is accepted anywhere raw rows are — same one line, driver types instead of a sniff.
+const data = buildChartData({ rows, columns, mapKind }); // or an adapter's runSql(...)
+const spec = chart(data, { chartType: "line" });
+```
+
+`chart(rows, opts)` and `chart(chartData, opts)` are the same call: pass raw `Record<string, unknown>[]`
+to sniff, or a `{ rows, fields?, encode?, notes? }` to trust declared types.
+
+**Numbers must arrive as numbers.** Some drivers stringify decimals/bigints (`revenue: "1234"`).
+Inference recovers all-numeric-string columns to a measure and adds an advisory note, but the robust
+fix is to declare the column's `kind` (via `fields` or an adapter) or cast in SQL. `fields` and
+`encode` are trusted verbatim: a wrong declaration is honored, so a mistyped measure yields a blank
+series (with a note).
+
+To catch these before a host renders, assert the encoding in a test with `explain()`:
+
+```ts
+import { explain } from "@bonnard/mcp-charts";
+
+expect(explain(sampleRows, { chartType: "bar" }).series.length).toBeGreaterThan(0);
+// or fail loud on a bad encoding:
+explain(sampleRows, { chartType: "bar", strict: true }); // throws on zero series / ignored encode
+```
+
+See the [connecting-a-database guide](https://docs.bonnard.dev/mcp-charts/connecting-a-database) for
+the full DB-correctness story and a troubleshooting table.
 
 ## Warehouse adapters
 
-Skip writing `runSql` by hand. Each adapter wraps your driver and maps native column types to chart roles (dimension, measure, time):
+Skip writing `runSql` by hand. Each adapter wraps your driver and maps native column types to chart
+roles (dimension, measure, time):
 
 ```ts
 import { postgresRunSql } from "@bonnard/mcp-charts/postgres";
 addCharts(server, { runSql: postgresRunSql(pool) });
 ```
 
-Bundled for Postgres, BigQuery, Snowflake, Databricks, and DuckDB. Each driver is an optional peer dependency, installed only if you import its subpath. See [warehouse adapters](https://docs.bonnard.dev/mcp-charts/adapters).
+Bundled for Postgres, BigQuery, Snowflake, Databricks, and DuckDB. Each driver is an optional peer
+dependency, installed only if you import its subpath. See
+[warehouse adapters](https://docs.bonnard.dev/mcp-charts/adapters).
+
+## Exports at a glance
+
+| Export                        | What it does                                                        |
+| ----------------------------- | ------------------------------------------------------------------- |
+| `addCharts`                   | Register the ad-hoc `visualize` tool (agent writes SQL).            |
+| `addDashboardTool`            | Register one tool returning a multi-cell `DashboardSpec`.           |
+| `addDashboardViews`           | Register `explore_views` + `render_view` over a set of named views. |
+| `chart` / `chartCell`         | Build a `ChartSpec` / dashboard cell from rows or typed `ChartData`. |
+| `explain`                     | Diagnose the encoding in a test, without rendering.                 |
+| `resolve` / `inferFields`     | The pure encoding brain and its field inference.                    |
+| `buildChartData`, `defaultNormalizeCell`, `assertReadOnlySql` | Adapter authoring kit.              |
+
+Full details in the [API reference](https://docs.bonnard.dev/mcp-charts/api-reference).
 
 ## Security
 
-`visualize` executes agent-written SQL against your database. Treat it as untrusted input: connect `runSql` to a **read-only, least-privilege** role scoped to the data you want exposed. Your database permissions are the security boundary; the SDK does not sandbox queries. See [Security](https://docs.bonnard.dev/mcp-charts/getting-started#security).
+`visualize` executes agent-written SQL against your database. Treat it as untrusted input: connect
+`runSql` to a **read-only, least-privilege** role scoped to the data you want exposed. Your database
+permissions are the security boundary; the SDK does not sandbox queries. See
+[Security](https://docs.bonnard.dev/mcp-charts/getting-started#security).
 
 ## Links
 

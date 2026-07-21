@@ -88,6 +88,8 @@ addDashboardTool(server, { name: "sales_dashboard", description: "Revenue overvi
 }));
 ```
 
+See the [dashboards guide](https://docs.bonnard.dev/mcp-charts/dashboards).
+
 ### Multiple views
 
 For a set of named views, `addDashboardViews` registers two tools over a registry: `explore_views`
@@ -119,7 +121,7 @@ addDashboardViews(server, {
 });
 ```
 
-See `examples/dashboard` for a five-view server.
+See `examples/dashboard` for a six-view server, and the [views guide](https://docs.bonnard.dev/mcp-charts/views).
 
 ## Warehouse adapters
 
@@ -166,6 +168,8 @@ expect(explain(sampleRows, { chartType: "bar" }).series.length).toBeGreaterThan(
 // or fail loud on a bad encoding:
 explain(sampleRows, { chartType: "bar", strict: true }); // throws on zero series / ignored encode
 ```
+
+See the [connecting-a-database guide](https://docs.bonnard.dev/mcp-charts/connecting-a-database) for the full DB-correctness story.
 
 ## Security
 
