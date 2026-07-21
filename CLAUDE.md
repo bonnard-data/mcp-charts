@@ -36,10 +36,22 @@ Ports are chosen to avoid collisions: tunnel **3020**, uat **3021**, inspect **3
 mcp-platform backend owns **3000**. ngrok auth is the "bon" account authtoken in treekey
 (`ngrok/BON_AUTHTOKEN`); never print it (see docs/DEV-TUNNEL.md for the config-precedence gotcha).
 
-## Release
-Changeset-driven: `pnpm changeset` -> `pnpm version-packages` -> `pnpm release` (build + publish).
-Core is at `0.1.3` (npm latest); next publish is **0.2.0** (staged changesets: dashboard-spec, inference-guardrails).
-**Do NOT publish casually** — publishing is a deliberate, separate step.
+## Release (publish to npm)
+Publishing runs in GitHub Actions, not locally. `publish.yml` is a manual `workflow_dispatch`:
+trigger it with `gh workflow run publish.yml -f version=<patch|minor|major>` (or the GitHub UI
+"Run workflow" button). It runs `npm version <bump>` on `packages/core`, builds (widget then core,
+re-embedding the widget), `check:exports`, then `npm publish --provenance` with the `NPM_TOKEN`
+secret. It then commits `Release @bonnard/mcp-charts v<version>`, tags `mcp-charts-v<version>`, and
+pushes to `main`.
+- The workflow builds from `origin/main`, so push the release commits to `origin/main` FIRST, then
+  trigger it. Pushing to `main` also runs CI (`ci.yml`: build, format, lint, typecheck, test,
+  check:exports). After it runs, `git pull` to pick up the release commit and tag.
+- The repo has changesets configured, but `publish.yml` does NOT use them (it bumps via `npm
+  version`). The `.changeset/*.md` files and the `pnpm changeset` / `version-packages` / `release`
+  scripts are currently unused; do not rely on them for the changelog. Wire them in or drop them later.
+- Core is at `0.2.0` (npm latest, published 2026-07-21). Docs live at docs.bonnard.dev via the
+  `bonnard-docs` repo (push its `main` to deploy on Vercel).
+Publishing is a deliberate manual trigger; do not run it casually.
 
 ## Conventions
 Comments: limited and refined, only when needed; clarify non-obvious behavior, don't narrate
