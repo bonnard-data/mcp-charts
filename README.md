@@ -67,40 +67,19 @@ numeric/temporal columns aren't inferred from raw driver values.
 
 Eight types, chosen automatically from the shape of your data or set explicitly: `bar`, `line`, `area`, `pie`, `scatter`, `funnel`, `waterfall`, `table`. Plus bar variants (stacked, grouped, 100% stacked, horizontal), dual-axis combos, bubble sizing, and reference lines. See the [chart types reference](https://docs.bonnard.dev/mcp-charts/chart-types).
 
-## Dashboards
+## Named views (charts and dashboards)
 
-Return a `DashboardSpec` (a grid of chart cells, KPI tiles, and text blocks) from your own tool.
-`chartCell` builds a cell from raw rows and `addDashboardTool` wires the widget, output schema, and
-result envelope the same way `addCharts` does:
-
-```ts
-import { addDashboardTool, chartCell } from "@bonnard/mcp-charts";
-
-addDashboardTool(server, { name: "sales_dashboard", description: "Revenue overview" }, () => ({
-  title: "Sales Dashboard",
-  columns: 2,
-  items: [
-    { type: "kpi", label: "Revenue", value: 336800, format: "currency", currency: "USD", delta: 61800 },
-    chartCell(monthlyRows, { chartType: "line", title: "Revenue by month", span: 2 }),
-    chartCell(regionRows, { chartType: "bar", title: "Revenue by region" }),
-    { type: "text", heading: "Summary", text: "Trending up, led by EU and US." },
-  ],
-}));
-```
-
-See the [dashboards guide](https://docs.bonnard.dev/mcp-charts/dashboards).
-
-### Multiple views
-
-For a set of named views, `addDashboardViews` registers two tools over a registry: `explore_views`
-lists what's available (id, title, description, params) and `render_view` renders one by `view_id`
-(a single `ChartSpec` via `chart(rows, opts)`, or a composed `DashboardSpec`), binding the result to
-the widget. Each `ViewDef` can declare zod `params` that `render_view` validates per view.
+When you author the queries instead of letting the agent write SQL, register named **views** with
+`addViews`. It registers two tools over a registry: `explore_views` lists what's available (id, title,
+description, params) and `render_view` renders one by `view_id`, binding the result to the widget.
+Each `ViewDef` returns a single `ChartSpec` (via `chart(rows, opts)`) or a composed `DashboardSpec`,
+and can declare zod `params` that `render_view` validates per view.
 
 ```ts
-import { addDashboardViews, chart, chartCell } from "@bonnard/mcp-charts";
+import { addViews, chart, chartCell } from "@bonnard/mcp-charts";
+import { z } from "zod";
 
-addDashboardViews(server, {
+addViews(server, {
   views: [
     {
       id: "revenue_trend",
@@ -115,13 +94,25 @@ addDashboardViews(server, {
       description: "KPIs + charts, optionally per region",
       kind: "dashboard",
       params: { region: z.enum(["EU", "US", "APAC"]).optional() },
-      render: ({ region }) => buildDashboard(region),
+      render: ({ region }) => ({
+        title: "Sales overview",
+        columns: 2,
+        items: [
+          { type: "kpi", label: "Revenue", value: 336800, format: "currency", currency: "USD", delta: 61800 },
+          chartCell(monthlyRows, { chartType: "line", title: "Revenue by month", span: 2, id: "revenue_by_month" }),
+          chartCell(regionRows, { chartType: "bar", title: "Revenue by region", id: "revenue_by_region" }),
+        ],
+      }),
     },
   ],
 });
 ```
 
-See `examples/dashboard` for a six-view server, and the [views guide](https://docs.bonnard.dev/mcp-charts/views).
+A `dashboard`-kind view returns a `DashboardSpec` (a grid of chart cells, KPI tiles, and text blocks);
+`chartCell` builds a cell from raw rows. Give a cell an `id` and the agent can re-render it alone by
+passing `render_view` an `item_id` (the ids appear in the dashboard summary). See `examples/dashboard`
+for a six-view server, the [views guide](https://docs.bonnard.dev/mcp-charts/views), and the
+[dashboards reference](https://docs.bonnard.dev/mcp-charts/dashboards) for the `DashboardSpec` shape.
 
 ## Warehouse adapters
 

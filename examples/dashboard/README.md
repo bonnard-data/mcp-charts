@@ -1,9 +1,9 @@
 # Dashboard: a multi-view dashboard surface from one MCP server
 
 This example registers a **multi-view** surface with
-[`addDashboardViews`](../../packages/core/src/dashboard-tool.ts): two tools over a registry of named
-views. `explore_views` lists what's available (id, title, description, params); `render_view` renders
-one by `view_id` into the embedded `ui://` widget. Views mix single charts and composed dashboards
+[`addViews`](../../packages/core/src/views.ts): two tools over a registry of named views.
+`explore_views` lists what's available (id, title, description, params); `render_view` renders one by
+`view_id` into the embedded `ui://` widget. Views mix single charts and composed dashboards
 (KPIs + charts + text) across several chart types.
 
 It serves MCP over **Streamable HTTP** so you can connect a remote MCP client (Claude Desktop, Cursor,
@@ -53,7 +53,9 @@ In the Inspector: set **Transport Type** to **Streamable HTTP**, **URL** to
 2. Call **`render_view`** with `{ "view_id": "sales_overview" }` and confirm the widget renders the
    grid (KPIs, a line chart, a bar chart, a text block).
 3. Pass `{ "view_id": "sales_overview", "params": { "region": "EU" } }` to see the numbers change.
-4. Try the single-chart views, e.g. `{ "view_id": "department_spend" }`, to see the long-label /
+4. Pass `{ "view_id": "sales_overview", "item_id": "revenue_by_region" }` to re-render one cell of the
+   dashboard as a standalone chart (the cell ids appear in the dashboard's summary text).
+5. Try the single-chart views, e.g. `{ "view_id": "department_spend" }`, to see the long-label /
    large-number handling.
 
 ## Claude Desktop (Streamable HTTP via a tunnel, no auth)
@@ -74,13 +76,15 @@ Claude Desktop build does not render MCP-Apps widgets, use the Inspector above t
 
 ## How it works
 
-`addDashboardViews` registers the widget resource plus both tools:
+`addViews` registers the widget resource plus both tools:
 
 - **`explore_views`** returns the catalog as `structuredContent.views` (and a text list), so the agent
   discovers what it can render before calling anything.
 - **`render_view`** validates the chosen `view_id` (enum) and any per-view `params` (strict zod),
   calls that view's `render`, and returns either a `ChartSpec` or a `DashboardSpec` bound to the
   widget via `_meta.ui.resourceUri` (with the `openai/outputTemplate` alias for the ChatGPT Apps SDK).
+  For a dashboard view, pass `item_id` to re-render a single chart cell by its id (the dashboard
+  views here give their cells stable ids like `revenue_by_month`).
 
 One cacheable `ui://bonnard/chart` resource serves the widget; it discriminates a `DashboardSpec`
 (`items`) from a single `ChartSpec` (`data`) and renders either. A permissive `outputSchema` declares

@@ -2,7 +2,7 @@
 "@bonnard/mcp-charts": minor
 ---
 
-DashboardSpec + multi-chart dashboard rendering + fixtures export
+DashboardSpec + named-views authoring (explore_views / render_view) + single-cell rendering
 
 Add a `DashboardSpec` contract (a grid of chart / KPI / text items) alongside the existing
 `ChartSpec`, with `isDashboardSpec` / `isChartSpec` runtime guards. The embedded widget now renders
@@ -11,17 +11,18 @@ signed delta), and text blocks, with multi-instance ECharts teardown and theme r
 `registerChartWidget` and `CHART_RESOURCE_URI` exports let a consumer serve the widget for its own
 tool. Shared dashboard fixtures are published on the `@bonnard/mcp-charts/fixtures` subpath.
 
-Also add dashboard authoring helpers that collapse the per-cell and per-tool boilerplate:
-`chart(rows, opts)` builds a standalone `ChartSpec` from raw rows (the sibling of `chartCell`, which
-wraps it in a dashboard cell), `chartCell(rows, opts)` builds a chart cell straight from raw rows
-(both infer the encoding via `resolve()`), and `addDashboardTool(server, def, handler)` registers a
-DashboardSpec-returning tool the same way `addCharts` registers `visualize` (widget resource,
-outputSchema, `_meta` link, error handling). `dashboardResult`, `summarizeDashboard`, and
-`DASHBOARD_OUTPUT_SCHEMA` are also exported for the manual path; the raw `DashboardSpec` route stays
-first-class.
+Add `addViews(server, { views })`: one authored entrypoint that registers `explore_views` (discover
+the available views: id, title, description, kind, params) and `render_view` (render one by
+`view_id`, validating per-view params) over a registry of named views. Each `ViewDef` returns a
+`ChartSpec` or a `DashboardSpec`, so a view can be a single chart or a full dashboard, both bound to
+the same widget. The authoring helpers `chart(rows, opts)`, `chartCell(rows, opts)`, and `explain`
+build specs from raw rows or a typed `ChartData` (both infer the encoding via `resolve()`).
+`dashboardResult`, `summarizeDashboard`, and `DASHBOARD_OUTPUT_SCHEMA` are exported for the manual
+hand-registration path; the raw `DashboardSpec` route stays first-class.
 
-Add `addDashboardViews(server, { views })` for the multi-view case: a views registry (each `ViewDef`
-returns a `ChartSpec` or `DashboardSpec`) surfaced as two tools. `explore_views` lists the available
-views (id, title, description, kind, params) for discovery; `render_view` renders one by `view_id`
-(validating per-view params) and binds the result to the chart widget. Handles both single-chart and
-multi-item-dashboard views from one tool pair.
+Add single-cell rendering. `chartCell(..., { id })` and `ChartCell.id` give a dashboard cell a stable
+id (`KpiTile.id` / `TextBlock.id` exist for uniform addressability; v1 selection renders chart cells
+only). `render_view` gains an optional `item_id`: params always apply to the whole view, then the
+named chart cell is projected out and returned as a standalone `ChartSpec`. Cell ids surface in the
+dashboard summary (`[id: ...]` per chart line) and in the tool descriptions, and a bad `item_id`
+error lists the selectable ids.

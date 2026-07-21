@@ -8,8 +8,7 @@ can grab the wrong copy, so make a MANUAL worktree of THIS repo if isolating.
 
 ## Layout
 - `packages/core` (`@bonnard/mcp-charts`, tsup) — the render compiler (`resolve()`), types, the DX
-  helpers (`chart`/`chartCell`/`dashboardResult`/`addDashboardTool`/`addDashboardViews`), and the
-  embedded widget HTML.
+  helpers (`chart`/`chartCell`/`dashboardResult`/`addViews`), and the embedded widget HTML.
 - `packages/widget` (`@bonnard/mcp-charts-widget`, vite) — the in-iframe renderer. Builds to ONE
   inlined `dist/index.html`, embedded into core via `packages/core/scripts/embed-widget.mjs` ->
   `packages/core/src/generated/widget-html.ts`. **Edit widget -> `pnpm build` re-embeds it into core.**
@@ -19,7 +18,7 @@ can grab the wrong copy, so make a MANUAL worktree of THIS repo if isolating.
 
 ## Build / test
 - `pnpm build` — widget (single-file) then core (embeds widget). `pnpm typecheck`, `pnpm test`
-  (196 core + 59 widget), `pnpm lint`, `pnpm check` (format + lint + typecheck).
+  (199 core + 59 widget), `pnpm lint`, `pnpm check` (format + lint + typecheck).
 
 ## Dev loop (pick by what you're editing — full detail in docs/DEV-LOOP.md)
 - **Widget renderer / core inference** -> `pnpm dev:harness` — HMR preview: the real widget in an
@@ -39,7 +38,7 @@ mcp-platform backend owns **3000**. ngrok auth is the "bon" account authtoken in
 
 ## Release
 Changeset-driven: `pnpm changeset` -> `pnpm version-packages` -> `pnpm release` (build + publish).
-Core is at `0.1.2`; next publish is **0.2.0** (staged changesets: dashboard-spec, inference-guardrails).
+Core is at `0.1.3` (npm latest); next publish is **0.2.0** (staged changesets: dashboard-spec, inference-guardrails).
 **Do NOT publish casually** — publishing is a deliberate, separate step.
 
 ## Conventions
