@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "tsx src/server.ts",
+    "start:watch": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
