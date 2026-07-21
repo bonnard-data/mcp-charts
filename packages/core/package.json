@@ -20,6 +20,9 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "mcp-charts": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
