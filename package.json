@@ -23,7 +23,7 @@
     "uat": "tsx scripts/uat.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && pnpm check:exports && changeset publish"
   },
   "devDependencies": {
     "@bonnard/mcp-charts": "workspace:*",

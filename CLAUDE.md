@@ -37,21 +37,22 @@ mcp-platform backend owns **3000**. ngrok auth is the "bon" account authtoken in
 (`ngrok/BON_AUTHTOKEN`); never print it (see docs/DEV-TUNNEL.md for the config-precedence gotcha).
 
 ## Release (publish to npm)
-Publishing runs in GitHub Actions, not locally. `publish.yml` is a manual `workflow_dispatch`:
-trigger it with `gh workflow run publish.yml -f version=<patch|minor|major>` (or the GitHub UI
-"Run workflow" button). It runs `npm version <bump>` on `packages/core`, builds (widget then core,
-re-embedding the widget), `check:exports`, then `npm publish --provenance` with the `NPM_TOKEN`
-secret. It then commits `Release @bonnard/mcp-charts v<version>`, tags `mcp-charts-v<version>`, and
-pushes to `main`.
-- The workflow builds from `origin/main`, so push the release commits to `origin/main` FIRST, then
-  trigger it. Pushing to `main` also runs CI (`ci.yml`: build, format, lint, typecheck, test,
-  check:exports). After it runs, `git pull` to pick up the release commit and tag.
-- The repo has changesets configured, but `publish.yml` does NOT use them (it bumps via `npm
-  version`). The `.changeset/*.md` files and the `pnpm changeset` / `version-packages` / `release`
-  scripts are currently unused; do not rely on them for the changelog. Wire them in or drop them later.
-- Core is at `0.2.0` (npm latest, published 2026-07-21). Docs live at docs.bonnard.dev via the
-  `bonnard-docs` repo (push its `main` to deploy on Vercel).
-Publishing is a deliberate manual trigger; do not run it casually.
+Changesets-driven, in GitHub Actions (`release.yml`) on push to `main`.
+- Per change: run `pnpm changeset`, pick the bump (patch/minor/major), write a one-line summary. It
+  commits a `.changeset/*.md` next to your code.
+- On push to `main`, `changesets/action` opens or updates a "Version Packages" PR that runs
+  `changeset version`: it aggregates the pending changesets into one bump, updates
+  `packages/core/package.json`, prepends `packages/core/CHANGELOG.md`, and deletes the consumed
+  changeset files.
+- Merge that PR when you want to release. The Action runs again, and with no pending changesets it
+  builds, runs `check:exports`, and `changeset publish`es to npm with provenance, then tags.
+No manual `npm version`, no hand-edited changelog, no `gh workflow run`: author a changeset, then
+merge the "Version Packages" PR.
+- Needs the `NPM_TOKEN` secret and the repo setting "Allow GitHub Actions to create and approve pull
+  requests" (Settings -> Actions -> General).
+- Core is at `0.2.0` (npm latest). Docs live at docs.bonnard.dev via the `bonnard-docs` repo (push
+  its `main` to deploy on Vercel).
+Publishing is deliberate: it only happens when you merge the Version Packages PR.
 
 ## Conventions
 Comments: limited and refined, only when needed; clarify non-obvious behavior, don't narrate

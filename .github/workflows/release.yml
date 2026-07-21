@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit the version bump + tags
+      pull-requests: write # open the "Version Packages" PR
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - run: pnpm install --no-frozen-lockfile
+
+      # With pending changesets, opens or updates a "Version Packages" PR that runs
+      # `changeset version`. With none (right after that PR merges), builds and publishes to npm.
+      - name: Changesets release
+        uses: changesets/action@v1
+        with:
+          version: pnpm run version-packages
+          publish: pnpm run release
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

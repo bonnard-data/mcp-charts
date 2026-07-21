@@ -2,6 +2,18 @@
 
 All notable changes to `@bonnard/mcp-charts` are documented here.
 
+## 0.2.0
+
+### Added
+
+- Dashboards and named views. Return a `DashboardSpec` (a grid of KPI tiles, charts, and text), and register a set of named views behind `explore_views` / `render_view` with `addViews`. A view returns a single chart or a full dashboard, and `render_view` can render one cell of a dashboard by `item_id`.
+- Inference guardrails and a typed-data path, so mistakes on live, unseen data stop failing silently: numeric-string recovery, zero-series notes, `explain()` / `strict` for CI, and a typed `chart(ChartData)` overload.
+- `mcp-charts preview` CLI. Render a saved spec file or a live tool result in the real chart widget from your terminal, so your preview matches what Claude and ChatGPT render.
+
+### Changed
+
+- Consolidated the authored surface onto `addViews`, and removed the single-dashboard `addDashboardTool` (it was never released).
+
 ## 0.1.3
 
 ### Added
