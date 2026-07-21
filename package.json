@@ -19,6 +19,7 @@
     "check:exports": "pnpm -F @bonnard/mcp-charts check:exports",
     "dev": "pnpm -r --parallel dev",
     "dev:harness": "pnpm -F @bonnard/mcp-charts-widget harness",
+    "dev:inspect": "bash scripts/dev-inspect.sh",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish"
