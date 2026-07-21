@@ -1,11 +1,11 @@
-// Multi-view registry: chart() parity with chartCell, and addDashboardViews driven through a real
+// Multi-view registry: chart() parity with chartCell, and addViews driven through a real
 // in-memory MCP Client (explore_views discovery + render_view execute, param validation, guards).
 import { describe, it, expect } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
-import { chart, chartCell, addDashboardViews, type ViewDef } from "../src/dashboard-tool.js";
+import { chart, chartCell, addViews, type ViewDef } from "../src/views.js";
 import { resolve } from "../src/resolve/resolve.js";
 import { isChartSpec, isDashboardSpec } from "../src/dashboard.js";
 
@@ -49,8 +49,8 @@ const VIEWS: ViewDef[] = [
         title: region ? `Sales (${region})` : "Sales",
         columns: 2,
         items: [
-          { type: "kpi", label: "Total", value: total },
-          chartCell(rows, { chartType: "bar", title: "By region" }),
+          { type: "kpi", id: "total_rev", label: "Total", value: total },
+          chartCell(rows, { chartType: "bar", title: "By region", id: "by_region" }),
         ],
       };
       return spec;
@@ -109,9 +109,9 @@ async function connect(configure: (s: McpServer) => void): Promise<Client> {
   return client;
 }
 
-describe("addDashboardViews", () => {
+describe("addViews", () => {
   it("registers explore_views (no _meta) and render_view (outputSchema + widget _meta) + the widget resource", async () => {
-    const client = await connect((s) => addDashboardViews(s, { views: VIEWS }));
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
     const { tools } = await client.listTools();
     const explore = tools.find((t) => t.name === "explore_views")! as any;
     const render = tools.find((t) => t.name === "render_view")! as any;
@@ -126,7 +126,7 @@ describe("addDashboardViews", () => {
   });
 
   it("explore_views returns structuredContent.views of length 5 with ids + kinds", async () => {
-    const client = await connect((s) => addDashboardViews(s, { views: VIEWS }));
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
     const res = (await client.callTool({ name: "explore_views", arguments: {} })) as any;
     expect(res.isError).toBeFalsy();
     expect(res.structuredContent.views).toHaveLength(5);
@@ -145,7 +145,7 @@ describe("addDashboardViews", () => {
   });
 
   it("render_view of a single chart returns a ChartSpec bound to the widget", async () => {
-    const client = await connect((s) => addDashboardViews(s, { views: VIEWS }));
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
     const res = (await client.callTool({ name: "render_view", arguments: { view_id: "revenue_trend" } })) as any;
     expect(res.isError).toBeFalsy();
     expect(isChartSpec(res.structuredContent)).toBe(true);
@@ -153,7 +153,7 @@ describe("addDashboardViews", () => {
   });
 
   it("render_view of a dashboard with a param returns a DashboardSpec with changed numbers", async () => {
-    const client = await connect((s) => addDashboardViews(s, { views: VIEWS }));
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
     const all = (await client.callTool({ name: "render_view", arguments: { view_id: "sales_overview" } })) as any;
     const eu = (await client.callTool({
       name: "render_view",
@@ -166,7 +166,7 @@ describe("addDashboardViews", () => {
   });
 
   it("an unknown param key yields an isError result", async () => {
-    const client = await connect((s) => addDashboardViews(s, { views: VIEWS }));
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
     const res = (await client.callTool({
       name: "render_view",
       arguments: { view_id: "sales_overview", params: { bogus: 1 } },
@@ -176,7 +176,7 @@ describe("addDashboardViews", () => {
   });
 
   it("render_view catalog description embeds one line per view", async () => {
-    const client = await connect((s) => addDashboardViews(s, { views: VIEWS }));
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
     const { tools } = await client.listTools();
     const render = tools.find((t) => t.name === "render_view")!;
     expect(render.description).toContain("`revenue_trend`");
@@ -185,7 +185,7 @@ describe("addDashboardViews", () => {
 
   it("throws at registration on an empty registry", () => {
     const s = new McpServer({ name: "t", version: "1.0.0" });
-    expect(() => addDashboardViews(s, { views: [] })).toThrow(/non-empty/);
+    expect(() => addViews(s, { views: [] })).toThrow(/non-empty/);
   });
 
   it("throws at registration on duplicate ids", () => {
@@ -194,6 +194,78 @@ describe("addDashboardViews", () => {
       { id: "x", title: "X", description: "d", render: () => chart(MONTHLY, {}) },
       { id: "x", title: "X2", description: "d", render: () => chart(MONTHLY, {}) },
     ];
-    expect(() => addDashboardViews(s, { views: dup })).toThrow(/duplicate view id "x"/);
+    expect(() => addViews(s, { views: dup })).toThrow(/duplicate view id "x"/);
+  });
+});
+
+describe("render_view item_id (cell selection)", () => {
+  it("selects one chart cell: a ChartSpec bound to the widget, with the chart summary", async () => {
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
+    const whole = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "sales_overview" },
+    })) as any;
+    const cell = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "sales_overview", item_id: "by_region" },
+    })) as any;
+    expect(cell.isError).toBeFalsy();
+    expect(isChartSpec(cell.structuredContent)).toBe(true);
+    expect(cell._meta.ui.resourceUri).toBe("ui://bonnard/chart");
+    const wholeCell = whole.structuredContent.items.find((it: any) => it.id === "by_region");
+    expect(cell.structuredContent).toEqual(wholeCell.spec);
+  });
+
+  it("applies params before selection: the EU cell reflects the filtered data", async () => {
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
+    const cell = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "sales_overview", params: { region: "EU" }, item_id: "by_region" },
+    })) as any;
+    expect(cell.isError).toBeFalsy();
+    expect(isChartSpec(cell.structuredContent)).toBe(true);
+    expect(cell.structuredContent.data).toHaveLength(1);
+    expect(cell.structuredContent.data[0].region).toBe("EU");
+  });
+
+  it("bad item_id errors and lists the selectable chart-cell ids", async () => {
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
+    const res = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "sales_overview", item_id: "trendz" },
+    })) as any;
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/unknown item_id "trendz"/);
+    expect(res.content[0].text).toContain(`"by_region"`);
+  });
+
+  it("item_id on a chart-kind view errors (does not apply)", async () => {
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
+    const res = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "revenue_trend", item_id: "anything" },
+    })) as any;
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/is a single chart; item_id does not apply/);
+  });
+
+  it("item_id matching a KPI id errors (not a chart)", async () => {
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
+    const res = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "sales_overview", item_id: "total_rev" },
+    })) as any;
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/is a kpi tile, not a chart/);
+  });
+
+  it("a dashboard with no cell ids reports how to enable selection", async () => {
+    const client = await connect((s) => addViews(s, { views: VIEWS }));
+    const res = (await client.callTool({
+      name: "render_view",
+      arguments: { view_id: "exec_summary", item_id: "x" },
+    })) as any;
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/no items with ids; add id to chartCell/);
   });
 });

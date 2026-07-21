@@ -156,6 +156,8 @@ export interface ChartExplanation {
 /** A single KPI tile: a headline number with optional signed delta and caption. */
 export interface KpiTile {
   type: "kpi";
+  /** Stable id for uniform addressability. v1 render_view item selection renders chart cells only. */
+  id?: string;
   label: string;
   value: number | string | null;
   format?: FieldFormat;
@@ -173,6 +175,8 @@ export interface KpiTile {
 /** A block of plain text (escaped by the renderer; markdown is a later decision). */
 export interface TextBlock {
   type: "text";
+  /** Stable id for uniform addressability. v1 render_view item selection renders chart cells only. */
+  id?: string;
   text: string;
   heading?: string;
   span?: number;
@@ -181,6 +185,8 @@ export interface TextBlock {
 /** A dashboard cell holding one resolved chart. Presence of `spec` is the discriminant. */
 export interface ChartCell {
   type?: "chart";
+  /** Stable id for addressing this cell via render_view's item_id (re-render one chart alone). */
+  id?: string;
   spec: ChartSpec;
   span?: number;
 }

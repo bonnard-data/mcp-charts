@@ -1,7 +1,7 @@
-// Dashboard authoring ergonomics: build chart cells without the buildChartData/resolve ceremony,
-// wrap a DashboardSpec into the widget-linked tool result, and register a dashboard tool the same
-// way addCharts registers `visualize`. The raw DashboardSpec path stays first-class — these just
-// remove the per-cell and per-tool boilerplate the example used to hand-write.
+// Authoring ergonomics for the named-views surface: build chart cells without the
+// buildChartData/resolve ceremony, wrap a DashboardSpec into the widget-linked tool result, and
+// register the explore_views + render_view tool pair over a set of named views. The raw
+// DashboardSpec path stays first-class — these just remove the per-cell boilerplate.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type {
@@ -29,6 +29,8 @@ const WIDGET_META = {
 
 /** Extra per-cell options layered on top of resolve()'s options. */
 export interface ChartCellOptions extends ResolveOptions {
+  /** Stable id for addressing this cell via render_view's item_id (re-render one chart alone). */
+  id?: string;
   /** Grid columns this cell spans (renderer clamps to the dashboard's column count). */
   span?: number;
   /** Declare field typing when inference can't nail it (currency, numeric-string dimensions). */
@@ -84,9 +86,10 @@ export function chart(source: Record<string, unknown>[] | ChartData, opts: Chart
  * width.
  */
 export function chartCell(source: Record<string, unknown>[] | ChartData, opts: ChartCellOptions): ChartCell {
-  const { span, ...chartOpts } = opts;
+  const { id, span, ...chartOpts } = opts;
   return {
     spec: chart(source, chartOpts),
+    ...(id ? { id } : {}),
     ...(span ? { span } : {}),
   };
 }
@@ -123,8 +126,9 @@ export function summarizeDashboard(spec: DashboardSpec): string {
       if (item.heading) lines.push(`- ${item.heading}`);
     } else if ("spec" in item) {
       const title = item.spec.title ?? item.spec.chartType;
+      const id = item.id ? ` [id: ${item.id}]` : "";
       const notes = item.spec.notes?.length ? ` Note: ${item.spec.notes.join(" ")}` : "";
-      lines.push(`- ${title}: ${item.spec.chartType} chart, ${item.spec.data.length} row(s)${notes}`);
+      lines.push(`- ${title}${id}: ${item.spec.chartType} chart, ${item.spec.data.length} row(s)${notes}`);
     }
   }
   if (spec.notes?.length) lines.push(`Note: ${spec.notes.join(" ")}`);
@@ -152,60 +156,12 @@ export const DASHBOARD_OUTPUT_SCHEMA = {
   notes: z.array(z.string()).optional(),
 };
 
-// render_view returns EITHER a ChartSpec or a DashboardSpec, so its outputSchema must accept both.
-// DASHBOARD_OUTPUT_SCHEMA can't: it requires `items` and types `columns` as a number (a ChartSpec's
-// `columns` is an array). A passthrough object still declares an outputSchema (so hosts forward
-// structuredContent to the widget) but sets `additionalProperties` open, accepting either spec shape.
+// render_view returns a ChartSpec, a DashboardSpec, or (with item_id) a single cell's ChartSpec, so
+// its outputSchema must accept all three. DASHBOARD_OUTPUT_SCHEMA can't: it requires `items` and
+// types `columns` as a number (a ChartSpec's `columns` is an array). A passthrough object still
+// declares an outputSchema (so hosts forward structuredContent to the widget) but sets
+// `additionalProperties` open, accepting any of the spec shapes.
 const VIEW_OUTPUT_SCHEMA = z.object({}).passthrough();
-
-/** Definition for a dashboard tool. `inputSchema` is a zod raw shape, like registerTool expects. */
-export interface DashboardToolDef {
-  name: string;
-  description: string;
-  title?: string;
-  inputSchema?: Record<string, z.ZodTypeAny>;
-}
-
-/** What a dashboard handler returns: a bare DashboardSpec (the common case) or one with a summary. */
-export type DashboardHandlerResult = DashboardSpec | { spec: DashboardSpec; summary?: string };
-
-/**
- * Register a tool that returns a DashboardSpec, wiring the chart widget the same way addCharts wires
- * `visualize`. The handler returns a DashboardSpec (or `{ spec, summary }`); this owns the widget
- * resource, the outputSchema, the _meta link, the result envelope, and error handling.
- */
-export function addDashboardTool<Args extends Record<string, unknown>>(
-  server: McpServer,
-  def: DashboardToolDef,
-  handler: (args: Args) => DashboardHandlerResult | Promise<DashboardHandlerResult>,
-): void {
-  registerChartWidget(server);
-
-  server.registerTool(
-    def.name,
-    {
-      ...(def.title && { title: def.title }),
-      description: def.description,
-      ...(def.inputSchema && { inputSchema: def.inputSchema }),
-      outputSchema: DASHBOARD_OUTPUT_SCHEMA,
-      annotations: { readOnlyHint: true, openWorldHint: false },
-      _meta: WIDGET_META,
-    },
-    async (args: Record<string, unknown>) => {
-      try {
-        const out = await handler(args as Args);
-        const { spec, summary } = "spec" in out ? out : { spec: out, summary: undefined };
-        return dashboardResult(spec, { summary });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          isError: true,
-          content: [{ type: "text" as const, text: `${def.name} failed: ${message}` }],
-        };
-      }
-    },
-  );
-}
 
 // --- Multi-view registry: one discovery tool (explore_views) + one execute tool (render_view)
 // over a set of named views, each returning a ChartSpec or DashboardSpec. ---
@@ -232,8 +188,8 @@ export interface ViewDef {
   render: (args: Record<string, unknown>) => ViewResult | Promise<ViewResult>;
 }
 
-/** Options for addDashboardViews. */
-export interface AddDashboardViewsOptions {
+/** Options for addViews. */
+export interface AddViewsOptions {
   views: ViewDef[];
   /** Override the discovery tool name (default: "explore_views"). */
   exploreToolName?: string;
@@ -287,18 +243,27 @@ function catalogLine(view: ViewDef): string {
   return `- \`${view.id}\`${kind} - ${view.description}.${paramList}`;
 }
 
+/** The widget-linked envelope for a single ChartSpec, shared by chart-kind views and selected cells. */
+function chartResult(spec: ChartSpec, summary?: string) {
+  return {
+    content: [{ type: "text" as const, text: summary ?? chartSummary(spec) }],
+    structuredContent: spec as unknown as Record<string, unknown>,
+    _meta: WIDGET_META,
+  };
+}
+
 /**
- * Register a two-tool multi-view dashboard surface: `explore_views` (list the available views) and
+ * Register a two-tool named-views surface: `explore_views` (list the available views) and
  * `render_view` (render one, bound to the chart widget). Each view returns a ChartSpec or a
  * DashboardSpec. Owns the widget resource, the outputSchema, the _meta link, param validation, the
  * result envelope, and error handling.
  */
-export function addDashboardViews(server: McpServer, opts: AddDashboardViewsOptions): void {
+export function addViews(server: McpServer, opts: AddViewsOptions): void {
   const { views } = opts;
-  if (!views.length) throw new Error("addDashboardViews: `views` must be non-empty");
+  if (!views.length) throw new Error("addViews: `views` must be non-empty");
   const ids = views.map((v) => v.id);
   const dupe = ids.find((id, i) => ids.indexOf(id) !== i);
-  if (dupe) throw new Error(`addDashboardViews: duplicate view id "${dupe}"`);
+  if (dupe) throw new Error(`addViews: duplicate view id "${dupe}"`);
 
   registerChartWidget(server);
 
@@ -308,13 +273,18 @@ export function addDashboardViews(server: McpServer, opts: AddDashboardViewsOpti
   const exploreName = opts.exploreToolName ?? "explore_views";
   const renderName = opts.renderToolName ?? "render_view";
 
+  const itemIdSentence =
+    `For dashboard views, pass item_id to re-render a single chart cell by its id ` +
+    `(ids appear in the dashboard summary).`;
+
   server.registerTool(
     exploreName,
     {
       title: "Explore views",
       description:
-        `List the available dashboard views (id, title, description, params). Call this first to ` +
-        `discover what you can render, then call \`${renderName}\` with a chosen view_id.`,
+        `List the available views (id, title, description, params). Call this first to ` +
+        `discover what you can render, then call \`${renderName}\` with a chosen view_id. ` +
+        itemIdSentence,
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -334,7 +304,8 @@ export function addDashboardViews(server: McpServer, opts: AddDashboardViewsOpti
   );
 
   const renderDescription =
-    `Render one dashboard view by view_id, returning a chart or dashboard bound to the widget. ` +
+    `Render one view by view_id, returning a chart or dashboard bound to the widget. ` +
+    `${itemIdSentence} ` +
     `Available views:\n${catalog}` +
     (opts.renderDescription ? `\n\n${opts.renderDescription}` : "");
 
@@ -346,6 +317,7 @@ export function addDashboardViews(server: McpServer, opts: AddDashboardViewsOpti
       inputSchema: {
         view_id: z.enum(ids as [string, ...string[]]),
         params: z.record(z.string(), z.unknown()).optional(),
+        item_id: z.string().optional(),
       },
       outputSchema: VIEW_OUTPUT_SCHEMA,
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -353,6 +325,7 @@ export function addDashboardViews(server: McpServer, opts: AddDashboardViewsOpti
     },
     async (args: Record<string, unknown>) => {
       const viewId = String(args.view_id);
+      const itemId = args.item_id != null ? String(args.item_id) : undefined;
       const view = byId.get(viewId);
       if (!view) {
         return { isError: true, content: [{ type: "text" as const, text: `${renderName}: unknown view "${viewId}"` }] };
@@ -376,14 +349,38 @@ export function addDashboardViews(server: McpServer, opts: AddDashboardViewsOpti
         }
         const out = await view.render(renderArgs);
         const { spec, summary } = "spec" in out ? out : { spec: out, summary: undefined };
-        if (isDashboardSpec(spec)) return dashboardResult(spec, { summary });
-        if (isChartSpec(spec)) {
-          return {
-            content: [{ type: "text" as const, text: summary ?? chartSummary(spec) }],
-            structuredContent: spec as unknown as Record<string, unknown>,
-            _meta: WIDGET_META,
-          };
+
+        if (itemId != null) {
+          const err = (text: string) => ({ isError: true as const, content: [{ type: "text" as const, text }] });
+          if (isChartSpec(spec)) {
+            return err(`${renderName}: view "${viewId}" is a single chart; item_id does not apply`);
+          }
+          if (!isDashboardSpec(spec)) {
+            throw new Error("view render returned neither a ChartSpec nor a DashboardSpec");
+          }
+          const matches = spec.items.filter((it) => "id" in it && it.id === itemId);
+          if (matches.length === 0) {
+            const chartIds = spec.items.flatMap((it) => ("spec" in it && it.id ? [it.id] : []));
+            const tail = chartIds.length
+              ? ` Selectable chart cells: ${chartIds.map((c) => `"${c}"`).join(", ")}`
+              : ` This view has no items with ids; add id to chartCell(...) to enable item selection`;
+            return err(`${renderName}: unknown item_id "${itemId}" for view "${viewId}".${tail}`);
+          }
+          if (matches.length > 1) {
+            return err(`${renderName}: duplicate item id "${itemId}" in view "${viewId}"`);
+          }
+          const item = matches[0]!;
+          if (!("spec" in item)) {
+            const kind = "type" in item && item.type === "text" ? "text block" : "kpi tile";
+            return err(
+              `${renderName}: item "${itemId}" in view "${viewId}" is a ${kind}, not a chart; only chart cells render alone`,
+            );
+          }
+          return chartResult(item.spec);
         }
+
+        if (isDashboardSpec(spec)) return dashboardResult(spec, { summary });
+        if (isChartSpec(spec)) return chartResult(spec, summary);
         throw new Error("view render returned neither a ChartSpec nor a DashboardSpec");
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

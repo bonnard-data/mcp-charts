@@ -1,14 +1,9 @@
-// Dashboard authoring helpers: chartCell parity with the raw routes, summarizeDashboard bounds,
-// dashboardResult envelope, and addDashboardTool driven through a real in-memory MCP Client.
+// Named-views authoring helpers: chartCell parity with the raw routes, summarizeDashboard bounds
+// (incl. the chart-cell id suffix), and the dashboardResult envelope.
 import { describe, it, expect } from "vitest";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { z } from "zod";
-import { chartCell, dashboardResult, summarizeDashboard, addDashboardTool } from "../src/dashboard-tool.js";
+import { chartCell, dashboardResult, summarizeDashboard } from "../src/views.js";
 import { resolve } from "../src/resolve/resolve.js";
 import { buildChartData } from "../src/adapters/sql.js";
-import { isDashboardSpec } from "../src/dashboard.js";
 import type { DashboardSpec, FieldKind, SourceColumn } from "../src/types.js";
 
 const mapKind = (type: unknown): FieldKind =>
@@ -85,6 +80,19 @@ describe("summarizeDashboard", () => {
     expect(text).not.toContain("42000");
     expect(text.split("\n").length).toBeLessThanOrEqual(spec.items.length + 2);
   });
+
+  it("appends [id: ...] for id-carrying chart cells, omits it otherwise", () => {
+    const spec: DashboardSpec = {
+      title: "Sales",
+      items: [
+        chartCell(MONTHLY, { chartType: "line", title: "Revenue by month", id: "revenue_by_month" }),
+        chartCell(BY_REGION, { chartType: "bar", title: "Revenue by region" }),
+      ],
+    };
+    const text = summarizeDashboard(spec);
+    expect(text).toContain("Revenue by month [id: revenue_by_month]:");
+    expect(text).not.toContain("Revenue by region [id:");
+  });
 });
 
 describe("dashboardResult", () => {
@@ -105,70 +113,5 @@ describe("dashboardResult", () => {
   it("honors a custom function summary", () => {
     const res = dashboardResult(sampleDashboard(), { summary: (s) => `title is ${s.title}` });
     expect(res.content[0].text).toBe("title is Sales Dashboard");
-  });
-});
-
-async function connect(configure: (s: McpServer) => void): Promise<Client> {
-  const server = new McpServer({ name: "test", version: "1.0.0" });
-  configure(server);
-  const [ct, st] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "test", version: "1.0.0" });
-  await Promise.all([server.connect(st), client.connect(ct)]);
-  return client;
-}
-
-describe("addDashboardTool", () => {
-  it("registers the tool with outputSchema + widget _meta, and the widget resource", async () => {
-    const client = await connect((s) =>
-      addDashboardTool(
-        s,
-        { name: "sales_dashboard", description: "A dashboard", inputSchema: { region: z.string().optional() } },
-        () => sampleDashboard(),
-      ),
-    );
-    const { tools } = await client.listTools();
-    const tool = tools.find((t) => t.name === "sales_dashboard")! as any;
-    expect(tool).toBeDefined();
-    expect(tool.outputSchema).toBeDefined();
-    expect(tool.outputSchema.properties.items).toBeDefined();
-    expect(tool._meta.ui.resourceUri).toBe("ui://bonnard/chart");
-    expect(tool._meta["openai/outputTemplate"]).toBe("ui://bonnard/chart");
-
-    const { resources } = await client.listResources();
-    expect(resources.map((r) => r.uri)).toContain("ui://bonnard/chart");
-  });
-
-  it("calling it returns a DashboardSpec passing isDashboardSpec", async () => {
-    const client = await connect((s) =>
-      addDashboardTool(s, { name: "sales_dashboard", description: "d" }, () => sampleDashboard()),
-    );
-    const res = (await client.callTool({ name: "sales_dashboard", arguments: {} })) as any;
-    expect(res.isError).toBeFalsy();
-    expect(isDashboardSpec(res.structuredContent)).toBe(true);
-    expect(res.structuredContent.title).toBe("Sales Dashboard");
-    expect(res.content[0].text).toContain("Sales Dashboard");
-  });
-
-  it("accepts a { spec, summary } handler return", async () => {
-    const client = await connect((s) =>
-      addDashboardTool(s, { name: "d", description: "d" }, () => ({
-        spec: sampleDashboard(),
-        summary: "override",
-      })),
-    );
-    const res = (await client.callTool({ name: "d", arguments: {} })) as any;
-    expect(res.content[0].text).toBe("override");
-    expect(isDashboardSpec(res.structuredContent)).toBe(true);
-  });
-
-  it("a thrown handler error yields an isError result", async () => {
-    const client = await connect((s) =>
-      addDashboardTool(s, { name: "boom", description: "d" }, () => {
-        throw new Error("no data");
-      }),
-    );
-    const res = (await client.callTool({ name: "boom", arguments: {} })) as any;
-    expect(res.isError).toBe(true);
-    expect(res.content[0].text).toMatch(/boom failed: no data/);
   });
 });

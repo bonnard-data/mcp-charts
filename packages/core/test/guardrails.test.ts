@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { chart, chartCell, explain, summarizeDashboard, addDashboardViews } from "../src/dashboard-tool.js";
+import { chart, chartCell, explain, summarizeDashboard, addViews } from "../src/views.js";
 import { buildChartData } from "../src/adapters/sql.js";
 import type { ChartData, DashboardSpec, FieldKind, SourceColumn } from "../src/types.js";
 
@@ -211,7 +211,7 @@ describe("notes surface on agent text", () => {
 
   it("render_view's single-chart summary text carries the chart's notes to the agent", async () => {
     const server = new McpServer({ name: "t", version: "1.0.0" });
-    addDashboardViews(server, {
+    addViews(server, {
       views: [
         {
           id: "blank",

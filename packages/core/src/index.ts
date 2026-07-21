@@ -34,8 +34,8 @@ export type {
 // Runtime guards: discriminate a DashboardSpec from a single ChartSpec.
 export { isDashboardSpec, isChartSpec } from "./dashboard.js";
 
-// Dashboard authoring: build cells/charts + register a dashboard tool (single view) or a two-tool
-// multi-view surface (explore_views + render_view) without the per-cell/per-tool glue.
+// Named-views authoring: build cells/charts + register the two-tool surface (explore_views +
+// render_view) over a set of named views, without the per-cell glue.
 export {
   chart,
   chartCell,
@@ -43,18 +43,9 @@ export {
   dashboardResult,
   summarizeDashboard,
   DASHBOARD_OUTPUT_SCHEMA,
-  addDashboardTool,
-  addDashboardViews,
-} from "./dashboard-tool.js";
-export type {
-  ChartOptions,
-  ChartCellOptions,
-  DashboardToolDef,
-  DashboardHandlerResult,
-  ViewDef,
-  ViewResult,
-  AddDashboardViewsOptions,
-} from "./dashboard-tool.js";
+  addViews,
+} from "./views.js";
+export type { ChartOptions, ChartCellOptions, ViewDef, ViewResult, AddViewsOptions } from "./views.js";
 
 // The pure brain: ChartData -> ChartSpec.
 export { resolve } from "./resolve/resolve.js";

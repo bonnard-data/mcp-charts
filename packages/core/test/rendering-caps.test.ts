@@ -2,7 +2,7 @@
 // regression that removes a cap (and re-introduces an unreadable chart) fails in CI. These mirror
 // the DOM-confirmed thresholds documented in docs/rendering-coverage.md.
 import { describe, it, expect } from "vitest";
-import { chart } from "../src/dashboard-tool.js";
+import { chart } from "../src/views.js";
 
 const cats = (n: number) => Array.from({ length: n }, (_, i) => `Cat${i + 1}`);
 

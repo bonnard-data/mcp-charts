@@ -11,14 +11,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import {
-  addDashboardViews,
-  chart,
-  chartCell,
-  type ChartSpec,
-  type DashboardSpec,
-  type ViewDef,
-} from "@bonnard/mcp-charts";
+import { addViews, chart, chartCell, type ChartSpec, type DashboardSpec, type ViewDef } from "@bonnard/mcp-charts";
 
 // 1. In-memory data (in real life this is your warehouse / API / analytics store).
 type RegionRow = { region: string; revenue: number };
@@ -89,8 +82,8 @@ function buildSalesOverview(region?: string): DashboardSpec {
         caption: "vs prior period",
       },
       { type: "kpi", label: "Orders", value: orders, caption: "this period" },
-      chartCell(monthly, { chartType: "line", title: "Revenue by month", span: 2 }),
-      chartCell(regionRows, { chartType: "bar", title: "Revenue by region" }),
+      chartCell(monthly, { chartType: "line", title: "Revenue by month", span: 2, id: "revenue_by_month" }),
+      chartCell(regionRows, { chartType: "bar", title: "Revenue by region", id: "revenue_by_region" }),
       {
         type: "text",
         heading: "Summary",
@@ -127,7 +120,7 @@ function buildExecSummary(): DashboardSpec {
         currency: "USD",
         caption: "revenue / orders",
       },
-      chartCell(MONTHLY, { chartType: "line", title: "Revenue trend", span: 3 }),
+      chartCell(MONTHLY, { chartType: "line", title: "Revenue trend", span: 3, id: "revenue_trend" }),
     ],
   };
 }
@@ -189,11 +182,12 @@ const VIEWS: ViewDef[] = [
 ];
 
 // 3. Build a fresh MCP server (widget resource + explore_views + render_view). One instance per
-// Streamable HTTP session, the standard sessioned pattern. addDashboardViews registers the widget
-// resource + both tools (discovery catalog + widget-bound render, error handling).
+// Streamable HTTP session, the standard sessioned pattern. addViews registers the widget resource +
+// both tools (discovery catalog + widget-bound render, error handling). The dashboard views give
+// their chart cells stable ids so render_view can re-render one cell alone via item_id.
 function buildMcpServer(): McpServer {
   const server = new McpServer({ name: "example-dashboard", version: "0.1.0" });
-  addDashboardViews(server, { views: VIEWS });
+  addViews(server, { views: VIEWS });
   return server;
 }
 

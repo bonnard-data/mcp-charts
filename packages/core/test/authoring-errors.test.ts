@@ -16,7 +16,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
-import { chart, addDashboardViews } from "../src/dashboard-tool.js";
+import { chart, addViews } from "../src/views.js";
 import { inferFields } from "../src/resolve/infer.js";
 import type { ChartSpec } from "../src/types.js";
 
@@ -30,9 +30,9 @@ function run(fn: () => ChartSpec): { spec?: ChartSpec; threw?: string } {
 }
 const keys = (s: ChartSpec) => s.series.map((x) => x.key);
 
-async function viewsClient(configure: Parameters<typeof addDashboardViews>[1]): Promise<Client> {
+async function viewsClient(configure: Parameters<typeof addViews>[1]): Promise<Client> {
   const server = new McpServer({ name: "t", version: "1.0.0" });
-  addDashboardViews(server, configure);
+  addViews(server, configure);
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "t", version: "1.0.0" });
   await Promise.all([server.connect(st), client.connect(ct)]);
@@ -379,7 +379,7 @@ describe("fields / encode escape hatches", () => {
 // =============================================================================================
 // 6. DASHBOARD / KPI / VIEW-LEVEL (via a real in-memory MCP client)
 // =============================================================================================
-describe("view-level (render_view / addDashboardViews)", () => {
+describe("view-level (render_view / addViews)", () => {
   // V1: unknown view_id. The tool's inputSchema is a z.enum of the known ids, so the MCP layer
   // rejects it BEFORE the handler with a validation error. runtime-error (author-visible at
   // call-time). This is the enum-blocks-it case.

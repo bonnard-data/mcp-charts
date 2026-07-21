@@ -12,7 +12,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { addDashboardViews, chart, type ChartSpec, type ViewDef } from "@bonnard/mcp-charts";
+import { addViews, chart, type ChartSpec, type ViewDef } from "@bonnard/mcp-charts";
 
 // 1. Your data. In real life this comes from a warehouse query or an API; here it is in memory.
 const REVENUE_BY_REGION = [
@@ -38,7 +38,7 @@ const VIEWS: ViewDef[] = [
 // 3. Build a fresh MCP server per request (widget resource + explore_views + render_view).
 function buildMcpServer(): McpServer {
   const server = new McpServer({ name: "__PROJECT_NAME__", version: "0.1.0" });
-  addDashboardViews(server, { views: VIEWS });
+  addViews(server, { views: VIEWS });
   return server;
 }
 
