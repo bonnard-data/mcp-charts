@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+### Patch Changes
+
+- f8c90d4: Export `WIDGET_HTML`, `WIDGET_META`, and `VIEW_OUTPUT_SCHEMA` from the package root. A downstream host can now serve the same widget renderer directly (not only through the MCP resource) and reuse the widget-linking `_meta` and output schema without maintaining its own copies.
+
 All notable changes to `@bonnard/mcp-charts` are documented here.
 
 ## 0.2.0
