@@ -55,6 +55,11 @@ export { inferFields } from "./resolve/infer.js";
 export { addCharts, registerChartWidget, CHART_RESOURCE_URI } from "./charts.js";
 export type { AddChartsOptions } from "./charts.js";
 
+// The widget HTML and its host metadata, so a downstream host can serve the same renderer directly
+// (not only via the MCP resource) and reuse the widget-linking `_meta`.
+export { WIDGET_HTML } from "./generated/widget-html.js";
+export { WIDGET_META, VIEW_OUTPUT_SCHEMA } from "./views.js";
+
 // Adapter authoring kit: turn a SQL result (rows + column types) into typed ChartData, plus the
 // read-only backstop. Use these to write a runSql for any warehouse the bundled adapters don't cover.
 export { buildChartData, defaultNormalizeCell, assertReadOnlySql } from "./adapters/sql.js";

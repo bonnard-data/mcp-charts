@@ -22,7 +22,7 @@ import { registerChartWidget, CHART_RESOURCE_URI } from "./charts.js";
 
 // Link a tool + its result to the chart widget. `ui.resourceUri` is the MCP Apps standard (Claude,
 // Cursor, Inspector); `openai/outputTemplate` is the ChatGPT Apps SDK alias. Same shape as visualize.
-const WIDGET_META = {
+export const WIDGET_META = {
   ui: { resourceUri: CHART_RESOURCE_URI },
   "openai/outputTemplate": CHART_RESOURCE_URI,
 } as const;
@@ -161,7 +161,7 @@ export const DASHBOARD_OUTPUT_SCHEMA = {
 // types `columns` as a number (a ChartSpec's `columns` is an array). A passthrough object still
 // declares an outputSchema (so hosts forward structuredContent to the widget) but sets
 // `additionalProperties` open, accepting any of the spec shapes.
-const VIEW_OUTPUT_SCHEMA = z.object({}).passthrough();
+export const VIEW_OUTPUT_SCHEMA = z.object({}).passthrough();
 
 // --- Multi-view registry: one discovery tool (explore_views) + one execute tool (render_view)
 // over a set of named views, each returning a ChartSpec or DashboardSpec. ---
