@@ -160,9 +160,15 @@
 
       const TOKEN_SETS = {
         none: undefined,
-        brand: { bg: "#fffdf7", fg: "#1c1917", muted: "#78716c", grid: "#e7e5e4", border: "#e7e5e4" },
-        // `background: red` is not an allowed token key, and the `;` value is rejected outright.
-        invalid: { background: "red", bg: "#fff; body { display: none }" },
+        brand: { bg: "#fffdf7", fg: "#1c1917", muted: "#78716c", border: "#e7e5e4", fontFamily: "Georgia, serif" },
+        // Every one of these is dropped: an unknown key, a declaration break, and a CSS-escaped
+        // `url()` that a substring denylist would miss but the colour grammar refuses.
+        invalid: {
+          background: "red",
+          bg: "#fff; body { display: none }",
+          fg: "u\\72l(https://attacker.example/pixel)",
+          fontFamily: "local('x')",
+        },
       };
 
       const panes = [
@@ -195,7 +201,7 @@
           {
             type: "bonnard:render",
             payload: fx.payload,
-            item: fx.item,
+            ...(fx.item == null ? {} : { item: fx.item }),
             theme: themeSel.value,
             tokens: TOKEN_SETS[tokensSel.value],
           },
@@ -209,9 +215,15 @@
           // the only identity you have.
           if (e.source !== pane.frameEl.contentWindow) continue;
           if (e.data?.type === "bonnard:ready") render(pane);
-          if (e.data?.type === "bonnard:size" && pane.sizing === "content") {
+          // Only content cells report a size, and every report carries sizing:"content", so it is
+          // safe to apply unconditionally. A fill chart sends nothing at all.
+          if (e.data?.type === "bonnard:size") {
             pane.boxEl.style.height = e.data.height + "px";
             pane.metaEl.textContent = `${e.data.height} x ${e.data.width}`;
+          }
+          if (e.data?.type === "bonnard:error") {
+            pane.metaEl.textContent = `error: ${e.data.code}`;
+            console.warn("render refused", e.data);
           }
         }
       });

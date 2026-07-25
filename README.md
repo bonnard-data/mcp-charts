@@ -143,7 +143,7 @@ app.get("/chart-widget", (_req, res) => res.type("html").send(WIDGET_HTML));
 
 `#embed` drops the widget's own padding, cell borders, and title, so your card provides the chrome. Charts fill the container you give them. KPI, text, and table cells report their content height over `bonnard:size`, so you can fit the frame to them.
 
-`payload` takes a `ChartSpec`, a bare `DashboardItem`, or a whole `DashboardSpec` with `item: n` to render just that cell. `sandbox="allow-scripts"` is all the widget needs, and theming goes through a bounded token set rather than CSS overrides.
+`payload` takes a `ChartSpec`, a bare `DashboardItem`, or a whole `DashboardSpec` with `itemId` (or `item: n`) to render just that cell. `sandbox="allow-scripts"` is all the widget needs, and theming goes through a bounded token set rather than CSS overrides. Tokens theme the HTML surface, not chart internals. The message types ship with the package, so TypeScript consumers can import `BonnardRenderMessage` and friends instead of copying them out of prose.
 
 See [docs/EMBED-MODE.md](./docs/EMBED-MODE.md) for the flags, messages, tokens, and the stability contract, plus `examples/embed/` for a runnable page.
 
