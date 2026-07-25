@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`embed fixtures — markup snapshots > embed markup: bare-chart-spec 1`] = `"<div class="solo chart"><div class="cell-chart" id="cell-0"></div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: chart 1`] = `"<div class="solo chart"><div class="cell-chart" id="cell-0"></div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: chart-with-notes 1`] = `"<div class="solo chart"><div class="cell-chart" id="cell-0"></div><div class="cell-notes">Coerced revenue to numbers. Showing the top 3 of 12 regions.</div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: dashboard-item-0 1`] = `"<div class="solo kpi"><div class="kpi-label">MRR</div><div class="kpi-value">$128,400<span class="kpi-delta up">▲ $0.12</span></div><div class="kpi-caption">vs last month</div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: dashboard-item-1 1`] = `"<div class="solo chart"><div class="cell-chart" id="cell-0"></div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: kpi 1`] = `"<div class="solo kpi"><div class="kpi-label">Revenue</div><div class="kpi-value">$128,400<span class="kpi-delta up">▲ $0.12</span></div><div class="kpi-caption">vs last month</div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: table 1`] = `"<div class="solo chart"><div class="cell-chart" id="cell-0"></div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: text 1`] = `"<div class="solo text-block"><h3>What changed</h3><div class="text-body">EMEA carried the quarter; APAC softened after the June price change.</div></div>"`;
+
+exports[`embed fixtures — markup snapshots > embed markup: whole-dashboard 1`] = `"<div class="grid" style="--cols:2"><div class="cell kpi"><div class="kpi-label">MRR</div><div class="kpi-value">$128,400<span class="kpi-delta up">▲ $0.12</span></div><div class="kpi-caption">vs last month</div></div><div class="cell chart"><div class="cell-chart" id="cell-1"></div></div></div>"`;

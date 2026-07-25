@@ -164,6 +164,48 @@
         font-size: 11px;
         margin-top: 8px;
       }
+      /* Embed mode (`#embed`): the consumer owns spacing, chrome, and height. Everything below is
+         inert without the `data-embed` root attribute set by embed.ts. */
+      html[data-embed] body {
+        padding: 0;
+      }
+      /* Fill-container height chain, so a chart takes the consumer's box instead of a fixed 340px.
+         `#root` fills only when it holds a chart: an intrinsic-height cell (KPI, text, table) must
+         stay content-height so its `scrollHeight` measures content, not the viewport. */
+      html[data-embed],
+      html[data-embed] body {
+        height: 100%;
+      }
+      html[data-embed] #root:has(> .ec),
+      html[data-embed] #root:has(> .solo.chart) {
+        height: 100%;
+      }
+      /* A single cell (`.solo`) carries no border, radius, or padding: the consumer's container is
+         the only frame. A chart cell fills the height chain; the rest stay intrinsic. */
+      html[data-embed] .solo {
+        min-width: 0;
+      }
+      html[data-embed] .solo.chart {
+        height: 100%;
+      }
+      /* A chart with a title or note gives those their intrinsic height and takes the rest. */
+      html[data-embed] .solo.chart,
+      html[data-embed] #root:has(> .ec) {
+        display: flex;
+        flex-direction: column;
+      }
+      html[data-embed] .solo.chart .cell-chart {
+        flex: 1;
+        min-height: 0;
+      }
+      /* Min-height guard: a consumer who forgets to size the frame still sees a chart. Scoped to the
+         single-cell shapes so a whole-dashboard embed keeps the grid's own 240px cells. */
+      html[data-embed] .solo.chart .cell-chart,
+      html[data-embed] .solo .ec,
+      html[data-embed] #root > .ec {
+        height: 100%;
+        min-height: 240px;
+      }
     </style>
   </head>
   <body>

@@ -20,6 +20,15 @@ export function isChartSpec(x: unknown): x is ChartSpec {
   return !!x && typeof x === "object" && Array.isArray((x as ChartSpec).data);
 }
 
+/** A bare dashboard cell: a chart cell (`spec`) or a tile discriminated by `type`. Checked after
+ *  isDashboardSpec/isChartSpec, which claim the whole-artifact shapes. */
+export function isDashboardItem(x: unknown): x is DashboardItem {
+  if (!x || typeof x !== "object") return false;
+  const item = x as { spec?: unknown; type?: unknown };
+  if (isChartSpec(item.spec)) return true;
+  return item.type === "kpi" || item.type === "text";
+}
+
 const clampCols = (n?: number) => Math.min(4, Math.max(1, n ?? 2));
 
 // A cell's grid span, clamped to [1, columns]. `columns` is already clamped by the caller.
@@ -53,27 +62,50 @@ export function renderChartNotes(spec: ChartSpec): string {
   return spec.notes?.length ? `<div class="cell-notes">${esc(spec.notes.join(" "))}</div>` : "";
 }
 
-/** Discriminate an item: a chart cell carries `spec`; otherwise dispatch on `type`. An unknown
- *  type renders a muted placeholder so an old widget never breaks on a newer item kind. */
-function renderItem(item: DashboardItem, index: number, columns: number): string {
-  const span = cellSpan((item as { span?: number }).span, columns);
-  const spanAttr = span > 1 ? ` data-span="${span}"` : "";
+/** An item's kind class and inner HTML, shared by the grid cell and the chrome-less embed cell.
+ *  A chart cell carries `spec`; otherwise dispatch on `type`. An unknown type renders a muted
+ *  placeholder so an old widget never breaks on a newer item kind. */
+function itemBody(item: DashboardItem, index: number, notes: boolean): { kind: string; inner: string } {
   if ("spec" in item) {
     // main.ts paints the chart into #cell-<i>; a per-cell note (blank chart, coerced columns,
     // capped categories) renders here as a sibling so the human sees it, mirroring dash-notes.
-    return `<div class="cell chart"${spanAttr}><div class="cell-chart" id="cell-${index}"></div>${renderChartNotes(item.spec)}</div>`;
+    const note = notes ? renderChartNotes(item.spec) : "";
+    return { kind: "chart", inner: `<div class="cell-chart" id="cell-${index}"></div>${note}` };
   }
-  if (item.type === "kpi") return `<div class="cell kpi"${spanAttr}>${renderKpi(item)}</div>`;
-  if (item.type === "text") return `<div class="cell text-block"${spanAttr}>${renderTextBlock(item)}</div>`;
-  return `<div class="cell unsupported"${spanAttr}>Unsupported item</div>`;
+  if (item.type === "kpi") return { kind: "kpi", inner: renderKpi(item) };
+  if (item.type === "text") return { kind: "text-block", inner: renderTextBlock(item) };
+  return { kind: "unsupported", inner: "Unsupported item" };
+}
+
+function renderItem(item: DashboardItem, index: number, columns: number, notes = true): string {
+  const span = cellSpan((item as { span?: number }).span, columns);
+  const spanAttr = span > 1 ? ` data-span="${span}"` : "";
+  const { kind, inner } = itemBody(item, index, notes);
+  return `<div class="cell ${kind}"${spanAttr}>${inner}</div>`;
+}
+
+/** Embed mode's single cell: the same item internals with no `.cell` wrapper, so the consumer's
+ *  container is the only frame. The chart mount keeps its `#cell-0` id, so main.ts paints it
+ *  through the same path as a grid cell. */
+export function renderSingleItem(item: DashboardItem, opts: { notes?: boolean } = {}): string {
+  const { kind, inner } = itemBody(item, 0, opts.notes !== false);
+  return `<div class="solo ${kind}">${inner}</div>`;
+}
+
+export interface DashboardShellOptions {
+  /** Draw the dashboard's own title. Embed mode passes false so the consumer's header is the one header. */
+  titled?: boolean;
+  /** Draw guardrail advisories (`.dash-notes` / `.cell-notes`). */
+  notes?: boolean;
 }
 
 /** Title + `.grid` shell. Chart cells are empty placeholders (`#cell-<i>`); kpi/text are final. */
-export function renderDashboardShell(spec: DashboardSpec): string {
+export function renderDashboardShell(spec: DashboardSpec, opts: DashboardShellOptions = {}): string {
+  const showNotes = opts.notes !== false;
   const columns = clampCols(spec.columns);
-  const title = spec.title ? `<div class="dash-title">${esc(spec.title)}</div>` : "";
-  const cells = spec.items.map((item, i) => renderItem(item, i, columns)).join("");
+  const title = spec.title && opts.titled !== false ? `<div class="dash-title">${esc(spec.title)}</div>` : "";
+  const cells = spec.items.map((item, i) => renderItem(item, i, columns, showNotes)).join("");
   const grid = `<div class="grid" style="--cols:${columns}">${cells}</div>`;
-  const notes = spec.notes?.length ? `<div class="dash-notes">${esc(spec.notes.join(" "))}</div>` : "";
+  const notes = showNotes && spec.notes?.length ? `<div class="dash-notes">${esc(spec.notes.join(" "))}</div>` : "";
   return `${title}${grid}${notes}`;
 }
