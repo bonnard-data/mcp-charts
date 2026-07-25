@@ -1,5 +1,12 @@
 # @bonnard/example-dashboard
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [a43352f]
+  - @bonnard/mcp-charts@0.3.1
+
 ## 0.0.2
 
 ### Patch Changes
