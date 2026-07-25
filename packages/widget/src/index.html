@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Defence in depth: the widget is one self-contained file that renders inline SVG. It needs no
+         network at all, so every fetching directive is denied outright. `unsafe-inline` covers the
+         inlined bundle and the style block; `data:` covers ECharts' inline SVG data URIs. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
     <title>Bonnard Chart</title>
     <style>
       :root {
@@ -11,13 +18,8 @@
         --muted: #6b7280;
         --grid: #e5e7eb;
         --border: #e5e7eb;
-        font-family:
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          "Segoe UI",
-          Roboto,
-          sans-serif;
+        --font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--font-family);
       }
       html[data-theme="dark"] {
         --bg: #171717;
@@ -31,7 +33,9 @@
       }
       body {
         margin: 0;
-        background: var(--bg);
+        /* background-color, not the `background` shorthand: a token value can then only ever be a
+           colour, never an image/url() layer. */
+        background-color: var(--bg);
         color: var(--fg);
         padding: 12px;
       }
@@ -170,39 +174,44 @@
         padding: 0;
       }
       /* Fill-container height chain, so a chart takes the consumer's box instead of a fixed 340px.
-         `#root` fills only when it holds a chart: an intrinsic-height cell (KPI, text, table) must
-         stay content-height so its `scrollHeight` measures content, not the viewport. */
-      html[data-embed],
-      html[data-embed] body {
+         Gated on `data-sizing="fill"`, which main.ts sets per payload. In content mode html/body
+         stay `auto` (the iframe-resizer rule), so `scrollHeight` measures content and can never
+         echo back the height the parent just wrote: no size feedback loop is possible. */
+      html[data-embed][data-sizing="fill"],
+      html[data-embed][data-sizing="fill"] body,
+      html[data-embed][data-sizing="fill"] #root {
         height: 100%;
       }
-      html[data-embed] #root:has(> .ec),
-      html[data-embed] #root:has(> .solo.chart) {
-        height: 100%;
+      html[data-embed][data-sizing="content"],
+      html[data-embed][data-sizing="content"] body,
+      html[data-embed][data-sizing="content"] #root {
+        height: auto;
       }
       /* A single cell (`.solo`) carries no border, radius, or padding: the consumer's container is
-         the only frame. A chart cell fills the height chain; the rest stay intrinsic. */
+         the only frame. */
       html[data-embed] .solo {
         min-width: 0;
       }
-      html[data-embed] .solo.chart {
+      /* Everything below is fill mode only. A content-mode cell (KPI, text, table) must keep its
+         intrinsic height, or its measurement would report the viewport rather than the content. */
+      html[data-embed][data-sizing="fill"] .solo.chart {
         height: 100%;
       }
       /* A chart with a title or note gives those their intrinsic height and takes the rest. */
-      html[data-embed] .solo.chart,
-      html[data-embed] #root:has(> .ec) {
+      html[data-embed][data-sizing="fill"] .solo.chart,
+      html[data-embed][data-sizing="fill"] #root:has(> .ec) {
         display: flex;
         flex-direction: column;
       }
-      html[data-embed] .solo.chart .cell-chart {
+      html[data-embed][data-sizing="fill"] .solo.chart .cell-chart {
         flex: 1;
         min-height: 0;
       }
       /* Min-height guard: a consumer who forgets to size the frame still sees a chart. Scoped to the
          single-cell shapes so a whole-dashboard embed keeps the grid's own 240px cells. */
-      html[data-embed] .solo.chart .cell-chart,
-      html[data-embed] .solo .ec,
-      html[data-embed] #root > .ec {
+      html[data-embed][data-sizing="fill"] .solo.chart .cell-chart,
+      html[data-embed][data-sizing="fill"] .solo .ec,
+      html[data-embed][data-sizing="fill"] #root > .ec {
         height: 100%;
         min-height: 240px;
       }

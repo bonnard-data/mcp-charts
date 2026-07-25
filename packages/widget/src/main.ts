@@ -1,6 +1,10 @@
 // The chart widget. Runs inside the host's sandboxed iframe, speaks the MCP Apps bridge
 // (ext-apps), receives the tool result (a ChartSpec in structuredContent), and renders it
 // with ECharts (SVG renderer) for interactivity. Tables render as HTML.
+//
+// Embed mode (`#embed`) is a separate, self-contained surface: it never constructs the MCP Apps
+// bridge, so nothing it does can be sequenced behind a handshake that an ordinary parent will
+// never answer.
 import { App } from "@modelcontextprotocol/ext-apps";
 import type { ChartSpec, DashboardItem, DashboardSpec } from "@bonnard/mcp-charts";
 import { echarts, themeName } from "./echarts-core.js";
@@ -22,7 +26,9 @@ import {
   parseEmbedFragment,
   sanitizeTokens,
   type EmbedConfig,
+  type EmbedSizing,
 } from "./embed.js";
+import { selectItem, validatePayload, type BonnardErrorCode, type BonnardWidgetMessage } from "./embed-protocol.js";
 
 const root = document.getElementById("root")!;
 
@@ -34,15 +40,36 @@ let charts: EChartsInstance[] = [];
 let observers: ResizeObserver[] = [];
 let currentTheme: "light" | "dark" = "light";
 let lastPayload: Payload | null = null;
-let lastItem: number | undefined;
+let lastItem: DashboardItem | undefined;
+// Theme precedence: an explicit theme from a render message outranks the fragment, which outranks
+// the host/OS. Once a message sets a theme it persists, so a later host refresh cannot revert it.
+let messageTheme: "light" | "dark" | undefined;
+// Set only when the MCP Apps bridge exists (never in embed mode), so theme detection can consult
+// the host context without embed mode depending on the bridge.
+let getHostTheme: () => string | undefined = () => undefined;
 
-// Embed mode is decided by the fragment before the first paint, so the host-surface CSS never flashes.
+// Embed mode is decided by the fragment before the first paint, so the host-surface CSS never
+// flashes. This runs synchronously at module evaluation: no await, no handshake, no host bridge.
 const embed: EmbedConfig | null = parseEmbedFragment(location.hash);
+const isHarness = location.hash === "#harness";
 if (embed) {
   document.documentElement.dataset.embed = "";
   if (embed.theme) currentTheme = embed.theme;
 }
-const sizeReporter = embed ? new SizeReporter(root, (m) => parent.postMessage(m, "*")) : null;
+
+// One reporter, driven only while the current payload is content-sized. A fill payload's height is
+// whatever the parent set, so reporting it would echo the parent's own value back and close the
+// feedback loop the protocol exists to avoid.
+const sizeReporter = embed ? new SizeReporter(root, (m) => postToParent({ ...m, sizing: "content" })) : null;
+let sizing: EmbedSizing = "content";
+
+function postToParent(message: BonnardWidgetMessage): void {
+  parent.postMessage(message, "*");
+}
+
+function postError(code: BonnardErrorCode, message: string, renderId?: string): void {
+  postToParent({ type: "bonnard:error", code, message, ...(renderId === undefined ? {} : { renderId }) });
+}
 
 function teardown() {
   for (const o of observers) o.disconnect();
@@ -51,13 +78,35 @@ function teardown() {
   charts = [];
 }
 
-// `item` selects one cell of a DashboardSpec (Grafana d-solo style); ignored for other payloads.
-function paint(structured: unknown, fallbackText?: string, item?: number) {
+/**
+ * Switch the sizing mode and keep the DOM and the reporter in step. `fill` pins the height chain to
+ * the iframe viewport and reports nothing; `content` leaves html/body at auto and measures.
+ */
+function setSizing(next: EmbedSizing) {
+  sizing = next;
+  if (!embed) return;
+  document.documentElement.dataset.sizing = next;
+  if (next === "fill") sizeReporter?.stop();
+  else sizeReporter?.start();
+}
+
+// A chart that is not a table has no intrinsic height, so it fills the container. Everything else
+// (KPI, text, table, empty state, fallback text) is content-height.
+const chartFills = (spec: ChartSpec) => spec.chartType !== "table" && spec.data.length > 0;
+
+function sizingForPayload(payload: Payload | null): EmbedSizing {
+  if (!payload) return "content";
+  if (isDashboardSpec(payload)) return "content"; // a whole grid keeps its own fixed cell heights
+  if (isChartSpec(payload)) return chartFills(payload) ? "fill" : "content";
+  if ("spec" in payload) return chartFills(payload.spec) ? "fill" : "content";
+  return "content";
+}
+
+function paint(structured: unknown, fallbackText?: string, selected?: DashboardItem) {
   // Dashboard first: it has `items` and no top-level `data`, so it must be checked before a chart.
   if (isDashboardSpec(structured)) {
     lastPayload = structured;
-    lastItem = item;
-    const selected = item == null ? undefined : structured.items[item];
+    lastItem = selected;
     if (selected) renderItemOnly(selected);
     else renderDashboard(structured);
   } else if (isChartSpec(structured)) {
@@ -71,20 +120,24 @@ function paint(structured: unknown, fallbackText?: string, item?: number) {
   } else if (fallbackText) {
     teardown();
     lastPayload = null;
+    lastItem = undefined;
     root.innerHTML = `<pre class="fallback">${esc(fallbackText)}</pre>`;
   } else {
     teardown();
     lastPayload = null;
+    lastItem = undefined;
     root.innerHTML = `<div class="empty">Waiting for chart data…</div>`;
   }
-  sizeReporter?.schedule();
+  setSizing(sizingForPayload(lastItem ?? lastPayload));
+  if (sizing === "content") sizeReporter?.schedule();
 }
 
 // Mount one ECharts instance (with its own ResizeObserver) into a target element.
 function mountChart(el: HTMLElement, spec: ChartSpec) {
   const c = echarts.init(el, themeName(currentTheme), { renderer: "svg" });
-  c.setOption(specToOption(spec));
+  // Record before setOption: a throw inside setOption must not leak an untracked instance.
   charts.push(c);
+  c.setOption(specToOption(spec));
   const ro = new ResizeObserver(() => c.resize());
   ro.observe(el);
   observers.push(ro);
@@ -95,9 +148,21 @@ const showTitle = () => !embed || embed.titled;
 const showNotes = () => !embed || embed.notes;
 const notesFor = (spec: ChartSpec) => (showNotes() ? renderChartNotes(spec) : "");
 
+/**
+ * The title above a single cell, honoured for every single-cell shape (chart, table, bare cell,
+ * or a dashboard cell selected by `item`/`itemId`). A cell's title is its own chart's title; a
+ * bare KPI/text tile has none, since its label/heading already reads as one.
+ */
+function soloTitle(item: DashboardItem | ChartSpec): string {
+  if (!showTitle()) return "";
+  const spec = isChartSpec(item) ? item : "spec" in item ? item.spec : undefined;
+  const title = spec?.title;
+  return title ? `<div class="title">${esc(title)}</div>` : "";
+}
+
 function renderChart(spec: ChartSpec) {
   teardown();
-  const title = spec.title && showTitle() ? `<div class="title">${esc(spec.title)}</div>` : "";
+  const title = soloTitle(spec);
   // A 0-row result: show an explicit empty-state instead of an empty table or a blank plot.
   if (spec.data.length === 0) {
     root.innerHTML = `${title}${renderEmptyState()}${notesFor(spec)}`;
@@ -105,7 +170,7 @@ function renderChart(spec: ChartSpec) {
   }
   // Tables are HTML, not a charting-library job.
   if (spec.chartType === "table") {
-    root.innerHTML = `${renderTable(spec)}${notesFor(spec)}`;
+    root.innerHTML = `${title}${renderTable(spec)}${notesFor(spec)}`;
     return;
   }
   root.innerHTML = `${title}<div class="ec" id="ec"></div>${notesFor(spec)}`;
@@ -136,10 +201,10 @@ function renderDashboard(spec: DashboardSpec) {
   });
 }
 
-// One cell, no `.cell` chrome. Embed mode's core render: a bare DashboardItem, or items[item].
+// One cell, no `.cell` chrome. Embed mode's core render: a bare DashboardItem, or a selected cell.
 function renderItemOnly(item: DashboardItem) {
   teardown();
-  root.innerHTML = renderSingleItem(item, { notes: showNotes() });
+  root.innerHTML = soloTitle(item) + renderSingleItem(item, { notes: showNotes() });
   if (!("spec" in item)) return;
   const el = document.getElementById("cell-0");
   if (el) paintCell(el, item.spec);
@@ -153,15 +218,18 @@ declare global {
   }
 }
 
-// Resolve the host theme across dialects: ChatGPT (window.openai) -> MCP Apps host context
-// (Cursor/Claude/Inspector) -> the OS preference as a generic fallback.
+/**
+ * Resolve the theme by precedence: an explicit `bonnard:render` theme, then the `#embed` fragment,
+ * then the host dialects (ChatGPT globals, MCP Apps host context), then the OS preference.
+ */
 function detectTheme(): "light" | "dark" {
-  // An embed consumer's declared theme is authoritative: the host dialects below describe the MCP
+  if (messageTheme) return messageTheme;
+  // An embed consumer's declared theme outranks the host dialects below: those describe the MCP
   // host's chrome, which is not the surface an embedded cell lives in.
   if (embed?.theme) return embed.theme;
   const oai = window.openai?.theme;
   if (oai === "light" || oai === "dark") return oai;
-  const ctx = app.getHostContext()?.theme;
+  const ctx = getHostTheme();
   if (ctx === "dark" || ctx === "light") return ctx;
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
@@ -175,60 +243,117 @@ function applyTheme(theme: "light" | "dark") {
 }
 const refreshTheme = () => applyTheme(detectTheme());
 
-const app = new App({ name: "Bonnard Chart", version: "0.1.0" });
+// --- Embed mode -------------------------------------------------------------------------------
+// Self-contained and synchronous. No MCP Apps bridge, so `bonnard:ready` cannot be sequenced
+// behind a `ui/initialize` handshake that an ordinary embedding parent never answers.
 
-app.ontoolresult = (params) => {
-  const text = params.content?.find((c) => c.type === "text")?.text;
-  paint(params.structuredContent, text);
-};
-// Theme-change channels: MCP Apps host context, ChatGPT globals, and OS preference.
-app.onhostcontextchanged = () => refreshTheme();
-document.addEventListener("openai:set_globals", (e) => {
-  if ((e as CustomEvent).detail?.globals?.theme) refreshTheme();
-});
-window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", refreshTheme);
+function handleRender(d: Record<string, unknown>): void {
+  const renderId = typeof d.renderId === "string" ? d.renderId : undefined;
+  if (d.theme === "light" || d.theme === "dark") {
+    messageTheme = d.theme;
+    applyTheme(d.theme);
+  }
+  if ("tokens" in d) applyTokens(document.documentElement, sanitizeTokens(d.tokens));
 
-// The parent-driven render channel, gated on the URL fragment so hosts never activate it (they load
-// the resource without one). Two dialects share this listener: `bonnard:render` is the public embed
-// API, `bonnard:harness-render` the internal dev harness. Render-only — every payload goes through
-// paint(), which escapes all strings — so shipping it inert in the production bundle is safe.
-const isHarness = location.hash === "#harness";
-if (embed || isHarness) {
+  const payload = d.payload;
+  const invalid = validatePayload(payload);
+  if (invalid) {
+    postError(invalid.code, invalid.message, renderId);
+    return;
+  }
+  // Selection only means something for a dashboard payload; fail closed on a bad selector so a
+  // typo cannot spill the whole grid into the caller's layout.
+  let selected: DashboardItem | undefined;
+  if (isDashboardSpec(payload)) {
+    const picked = selectItem(payload, { item: d.item, itemId: d.itemId });
+    if (picked && "code" in picked) {
+      postError(picked.code, picked.message, renderId);
+      return;
+    }
+    selected = picked?.item;
+  } else if (d.item !== undefined || d.itemId !== undefined) {
+    postError("invalid-item-selector", "item/itemId apply only to a DashboardSpec payload", renderId);
+    return;
+  }
+
+  try {
+    paint(payload, undefined, selected);
+  } catch (e) {
+    teardown();
+    lastPayload = null;
+    lastItem = undefined;
+    root.innerHTML = `<div class="empty">Waiting for chart data…</div>`;
+    postError("render-failed", e instanceof Error ? e.message : String(e), renderId);
+  }
+}
+
+if (embed) {
+  window.addEventListener("message", (e) => {
+    // The frame is opaque-origin, so the origin string is useless, but the sender's identity is
+    // not: only our own parent may drive this frame.
+    if (e.source !== parent) return;
+    const d = e.data as Record<string, unknown> | null;
+    // `#embed` speaks only the public dialect. The harness dialect stays internal.
+    if (!d || d.type !== "bonnard:render") return;
+    handleRender(d);
+  });
+}
+
+// --- Dev harness ------------------------------------------------------------------------------
+// The internal dialect, unchanged: `#harness` accepts only `bonnard:harness-render`.
+
+if (isHarness) {
   window.addEventListener("message", (e) => {
     const d = e.data as {
       type?: string;
-      payload?: unknown;
       structuredContent?: unknown;
       text?: string;
-      item?: number;
       theme?: "light" | "dark";
-      tokens?: unknown;
     } | null;
-    const isRender = d?.type === "bonnard:render";
-    if (!isRender && d?.type !== "bonnard:harness-render") return;
+    if (d?.type !== "bonnard:harness-render") return;
     if (d.theme === "light" || d.theme === "dark") applyTheme(d.theme);
-    if (embed && "tokens" in d) applyTokens(document.documentElement, sanitizeTokens(d.tokens));
-    // `payload` is the public field; `structuredContent` is the harness (and MCP tool-result) name.
-    const payload = isRender && "payload" in d ? d.payload : d.structuredContent;
-    const item = typeof d.item === "number" && Number.isInteger(d.item) && d.item >= 0 ? d.item : undefined;
-    paint(payload, d.text, item);
+    paint(d.structuredContent, d.text);
   });
-  // Tell the parent we're (re)loaded so it re-feeds the current payload. For the harness this is
-  // what turns a Vite full-reload of the iframe into an HMR-like preview loop; for an embed it is
-  // the handshake a consumer waits on before its first `bonnard:render`.
-  if (embed) parent.postMessage({ type: "bonnard:ready", protocolVersion: EMBED_PROTOCOL_VERSION }, "*");
-  if (isHarness) parent.postMessage({ type: "bonnard:harness-ready" }, "*");
 }
 
 paint(undefined);
+
+if (embed) {
+  // Announce readiness immediately, in the same synchronous turn as the first paint. A parent that
+  // posted a render before this point simply gets re-fed, since it waits on ready.
+  postToParent({ type: "bonnard:ready", protocolVersion: EMBED_PROTOCOL_VERSION });
+}
+if (isHarness) parent.postMessage({ type: "bonnard:harness-ready" }, "*");
+
 refreshTheme(); // resolves ChatGPT / OS theme immediately (before any MCP Apps handshake)
-// Content-height reporting starts with the first paint and runs for the frame's lifetime: fonts and
-// text wrapping settle after paint, so ResizeObserver is the only reliable trigger.
-sizeReporter?.start();
-app
-  .connect()
-  .then(refreshTheme) // host context is available after connect (Cursor/Claude/Inspector)
-  .catch((e) => {
-    // Not running inside an MCP Apps host (e.g. ChatGPT or opened directly) — keep going.
-    console.warn("MCP Apps host not detected:", e);
+
+window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", refreshTheme);
+
+// --- MCP Apps host bridge ---------------------------------------------------------------------
+// Only outside embed mode. The ext-apps App posts a `ui/initialize` request to the parent and
+// installs its own message transport plus an auto-resizer; inside an embed that is a competing
+// size protocol and a handshake an ordinary embedding parent never answers, so we neither
+// construct it nor register its host listeners.
+
+if (!embed) {
+  const app = new App({ name: "Bonnard Chart", version: "0.1.0" });
+  getHostTheme = () => app.getHostContext()?.theme;
+
+  app.ontoolresult = (params) => {
+    const text = params.content?.find((c) => c.type === "text")?.text;
+    paint(params.structuredContent, text);
+  };
+  // Theme-change channels: MCP Apps host context, ChatGPT globals, and OS preference.
+  app.onhostcontextchanged = () => refreshTheme();
+  document.addEventListener("openai:set_globals", (e) => {
+    if ((e as CustomEvent).detail?.globals?.theme) refreshTheme();
   });
+
+  app
+    .connect()
+    .then(refreshTheme) // host context is available after connect (Cursor/Claude/Inspector)
+    .catch((e) => {
+      // Not running inside an MCP Apps host (e.g. ChatGPT or opened directly) — keep going.
+      console.warn("MCP Apps host not detected:", e);
+    });
+}
