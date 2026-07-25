@@ -126,8 +126,19 @@ app.get("/chart-widget", (_req, res) => res.type("html").send(WIDGET_HTML));
 ```
 
 ```html
-<div class="my-card" style="height: 260px">
-  <iframe id="rev" src="/chart-widget#embed" sandbox="allow-scripts" style="width: 100%; height: 100%; border: 0"></iframe>
+<style>
+  .my-card {
+    height: 260px;
+  }
+  .my-card iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+</style>
+<div class="my-card">
+  <iframe id="rev" src="/chart-widget#embed" sandbox="allow-scripts"></iframe>
 </div>
 
 <script>
@@ -136,12 +147,16 @@ app.get("/chart-widget", (_req, res) => res.type("html").send(WIDGET_HTML));
     if (e.source !== frame.contentWindow) return;
     if (e.data?.type === "bonnard:ready")
       frame.contentWindow.postMessage({ type: "bonnard:render", payload: spec, theme: "light" }, "*");
-    if (e.data?.type === "bonnard:size") frame.style.height = e.data.height + "px";
+    if (e.data?.type === "bonnard:size") {
+      // "content" carries a height to apply; "fill" means release yours and let your layout decide.
+      if (e.data.sizing === "content") frame.style.height = e.data.height + "px";
+      else frame.style.removeProperty("height");
+    }
   });
 </script>
 ```
 
-`#embed` drops the widget's own padding, cell borders, and title, so your card provides the chrome. Charts fill the container you give them. KPI, text, and table cells report their content height over `bonnard:size`, so you can fit the frame to them.
+`#embed` drops the widget's own padding, cell borders, and title, so your card provides the chrome. KPI, text, and table cells report their content height over `bonnard:size` (`sizing: "content"`), so you can fit the frame to them. Charts fill the container you give them and report `sizing: "fill"` with no height, telling you to release any height you had applied. Always branch on `sizing`.
 
 `payload` takes a `ChartSpec`, a bare `DashboardItem`, or a whole `DashboardSpec` with `itemId` (or `item: n`) to render just that cell. `sandbox="allow-scripts"` is all the widget needs, and theming goes through a bounded token set rather than CSS overrides. Tokens theme the HTML surface, not chart internals. The message types ship with the package, so TypeScript consumers can import `BonnardRenderMessage` and friends instead of copying them out of prose.
 

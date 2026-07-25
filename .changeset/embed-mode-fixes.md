@@ -14,12 +14,31 @@ competing with `bonnard:size`. Embed setup is now fully synchronous and self-con
 `data-embed` attribute, the first paint, and `bonnard:ready` all happen in one turn, sequenced behind
 nothing. Outside embed mode the bridge behaves exactly as before.
 
-**Sizing is now structurally loop-safe.** The widget tracks `sizing: "fill" | "content"` per payload.
-Content-height kinds (KPI, text, table, empty state, fallback) report `bonnard:size`, now carrying
-`sizing: "content"`. Fill charts report **nothing at all**, because their height is whatever you set,
-so echoing it back was the feedback channel the protocol was meant to avoid. In content mode `html`,
-`body`, and `#root` stay at `height: auto`, so a measurement cannot depend on the height you just
-applied. A parent can apply every report unconditionally.
+**Sizing is now structurally loop-safe, and a fill chart can no longer be left collapsed.** The widget
+tracks `sizing: "fill" | "content"` per payload, and every `bonnard:size` message carries that
+discriminant.
+
+- `sizing: "content"` (KPI, text, table, fallback) carries a measured `height` to apply.
+- `sizing: "fill"` (charts) carries `height: null` and means *release any height you applied for this
+  frame*, since only the parent can decide a chart's height. No measured height is ever reported for a
+  fill payload, so there is no value to feed back.
+
+In content mode `html`, `body`, and `#root` stay at `height: auto`, so a measurement cannot depend on
+the height you just applied: there is no loop to converge.
+
+The release message closes a collapse trap that 0.3.0's own documented handler walked straight into.
+The pre-render "waiting for chart data" placeholder is content-shaped, so it reported roughly 48px; a
+parent applying that shrank the frame; the fill chart then filled 48px permanently, because a fill
+payload reported nothing and so never told the parent to let go. Two changes fix it: the widget stays
+silent until a payload has actually rendered (the placeholder's height says nothing about the payload
+to come), and entering fill mode is announced explicitly.
+
+**Breaking-ish note for anyone who adopted 0.3.0's embed handler:** branch on `sizing` rather than
+applying `height` unconditionally. The docs, README, and `examples/embed/` now all show the branching
+form, and giving the frame its height from a sized container via a stylesheet rule (rather than an
+inline style) is what lets a release fall back to your layout height. Applying `height` blindly is now
+harmless rather than destructive, since the fill message's `height` is `null`, but it will not restore
+the frame.
 
 **Token validation is by property grammar, not a denylist.** The old check only rejected a literal
 `url(`, but CSS function names accept escapes, so `u\72l(https://…)` slipped through and landed in
@@ -58,10 +77,12 @@ title.
 valid `theme` on a render message becomes a persistent explicit override that a later host or OS
 change will not revert; host and OS apply only when neither exists.
 
-**The protocol surface is exported.** `EmbedTokens`, `EmbedPayload`, `BonnardRenderMessage`,
-`BonnardReadyMessage`, `BonnardSizeMessage`, `BonnardErrorMessage`, `BonnardErrorCode`,
+**The protocol surface is exported.** `EmbedTokens`, `EmbedPayload`, `EmbedSizing`,
+`BonnardRenderMessage`, `BonnardReadyMessage`, `BonnardSizeMessage` (a union of
+`BonnardContentSizeMessage` and `BonnardFillSizeMessage`), `BonnardErrorMessage`, `BonnardErrorCode`,
 `BonnardWidgetMessage`, `BonnardParentMessage`, `EMBED_PROTOCOL_VERSION`, and `EMBED_LIMITS` now come
-from `@bonnard/mcp-charts`, so TypeScript consumers stop hand-copying types out of the docs.
+from `@bonnard/mcp-charts`, so TypeScript consumers stop hand-copying types out of the docs. Narrowing
+`BonnardSizeMessage` on `sizing` gives you the right `height` type for free: `number` or `null`.
 
 **What tokens actually theme, stated plainly.** Tokens theme the HTML surface only: page background,
 body text, table rules, tiles, and notes. They do **not** theme ECharts axes, gridlines, legend,
@@ -83,8 +104,13 @@ above.
 Also: real browser integration tests now drive the built widget inside an opaque
 `sandbox="allow-scripts"` iframe, covering ready timing and ordering, the `data-embed` activation,
 source filtering, malformed payloads, theme precedence, token attacks, fill-versus-content sizing with
-a convergence bound, and the inertness of the no-fragment and `#harness` paths. The previous suite only
-exercised the helpers, which is why the issues above shipped.
+a convergence bound, the collapse sequence above (including under 0.3.0's naive handler), and the
+inertness of the no-fragment and `#harness` paths. The previous suite only exercised the helpers, which
+is why the issues above shipped.
+
+One testing note, since it looks like a bug and is not: Chrome throttles `requestAnimationFrame` for
+offscreen cross-origin iframes, and the size reporter is rAF-coalesced, so a frame scrolled out of view
+may report no size at all until it becomes visible. Test embed sizing with the frame on screen.
 
 Known gaps, documented in `docs/EMBED-MODE.md`: chart theming, `notes=garbage` reading as off,
 unspecified fragment-parsing details (duplicate keys, case, percent-encoding), the 240px minimum being

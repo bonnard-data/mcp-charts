@@ -125,11 +125,16 @@ describe("embed mode: sender authentication", () => {
 });
 
 describe("embed mode: fill versus content sizing", () => {
-  it("a fill chart reports no size at all", async () => {
+  it("a fill chart reports no content height, only the fill release", async () => {
     // Sandboxed (opaque origin): the message behaviour is what a real consumer sees.
     await mountAndWait("#embed");
     const msgs = await renderAndSettle({ payload: CHART }, 900);
-    expect(msgs.filter((m) => m.type === "bonnard:size")).toEqual([]);
+    const sizes = msgs.filter((m) => m.type === "bonnard:size");
+    // No measured height is ever reported for a fill payload, so there is nothing to feed back.
+    expect(sizes.filter((m) => m.data.sizing === "content")).toEqual([]);
+    // Exactly one release, telling the parent to let go of any height it had applied.
+    expect(sizes.filter((m) => m.data.sizing === "fill")).toHaveLength(1);
+    expect(sizes.every((m) => m.data.height === null)).toBe(true);
   });
 
   it("marks a fill chart as fill in the DOM", async () => {
@@ -181,10 +186,10 @@ describe("embed mode: fill versus content sizing", () => {
   for (const [label, payload] of convergenceCases) {
     it(`converges when the parent applies every reported height: ${label}`, async () => {
       await mountAndWait("#embed");
-      await page.evaluate(() => window.__applyHeights(true));
+      await page.evaluate(() => window.__applyHeights("correct"));
       const msgs = await renderAndSettle({ payload }, 2000);
       await page.evaluate(() => window.__applyHeights(false));
-      const sizes = msgs.filter((m) => m.type === "bonnard:size");
+      const sizes = msgs.filter((m) => m.type === "bonnard:size" && m.data.sizing === "content");
       // A few reports are legitimate (first paint, then a font/wrap settle). An oscillation would
       // keep posting for the whole window, so a small bound is the real assertion.
       expect(sizes.length).toBeGreaterThanOrEqual(1);
@@ -195,6 +200,108 @@ describe("embed mode: fill versus content sizing", () => {
       expect(end - last.t).toBeGreaterThanOrEqual(0);
     });
   }
+});
+
+describe("embed mode: a fill chart never leaves the frame collapsed", () => {
+  // The 0.3.1 trap. The pre-render waiting state is content-shaped, so it used to report ~48px; a
+  // parent applying that shrank the frame, and the fill chart then filled 48px permanently, with no
+  // message ever telling the parent to let go. Both halves are asserted here.
+
+  it("the waiting state alone drives no height change", async () => {
+    await page.evaluate(() => window.__applyHeights("naive"));
+    await mountAndWait("#embed", { height: 300 });
+    await settle(900);
+    const box = await page.evaluate(() => window.__frameBox());
+    await page.evaluate(() => window.__applyHeights(false));
+    // Nothing was applied, so no inline height exists and the frame is still the container's height.
+    expect(box.styleHeight).toBe("");
+    expect(box.height).toBe(300);
+    // And no content size was reported for the placeholder.
+    const sizes = (await log()).filter((m) => m.type === "bonnard:size");
+    expect(sizes).toEqual([]);
+  });
+
+  it("a fill chart keeps the parent's height even under the naive handler", async () => {
+    // `naive` is the handler 0.3.0's docs showed: apply `height` unconditionally. With a null height
+    // on the fill message it must not produce a usable pixel value, so the frame keeps its own size.
+    await page.evaluate(() => window.__applyHeights("naive"));
+    await mountAndWait("#embed", { height: 300 });
+    await renderAndSettle({ payload: CHART }, 1500);
+    const box = await page.evaluate(() => window.__frameBox());
+    await page.evaluate(() => window.__applyHeights(false));
+    expect(box.height).toBe(300);
+  });
+
+  it("a fill chart releases a height applied for a previous content payload", async () => {
+    await page.evaluate(() => window.__applyHeights("correct"));
+    await mountAndWait("#embed", { height: 300 });
+    // A KPI first: the parent legitimately shrinks the frame to the content height.
+    await renderAndSettle({ payload: KPI }, 1200);
+    const shrunk = await page.evaluate(() => window.__frameBox());
+    expect(shrunk.height).toBeLessThan(120);
+    // Then a chart. The widget must announce fill so the parent can restore its own height.
+    const msgs = await renderAndSettle({ payload: CHART }, 1500);
+    const box = await page.evaluate(() => window.__frameBox());
+    await page.evaluate(() => window.__applyHeights(false));
+    const release = msgs.find((m) => m.type === "bonnard:size" && m.data.sizing === "fill");
+    expect(release, "expected a sizing:fill release message").toBeTruthy();
+    expect(release!.data.height).toBeNull();
+    expect(box.height).toBe(300);
+  });
+
+  it("the released frame holds a full-height chart, not a squashed one", async () => {
+    await page.evaluate(() => window.__applyHeights("correct"));
+    await mountAndWait("#embed", { sandbox: false, height: 300 });
+    await renderAndSettle({ payload: KPI }, 1200);
+    await renderAndSettle({ payload: CHART }, 1500);
+    const measured = await page.evaluate(() => {
+      const f = document.querySelector("#box iframe") as HTMLIFrameElement;
+      const svg = f.contentDocument!.querySelector("svg");
+      return {
+        frameHeight: Math.round(f.getBoundingClientRect().height),
+        svgHeight: svg ? Math.round(svg.getBoundingClientRect().height) : null,
+      };
+    });
+    await page.evaluate(() => window.__applyHeights(false));
+    expect(measured.frameHeight).toBe(300);
+    // The chart fills the restored frame rather than overflowing a collapsed one.
+    expect(measured.svgHeight).toBeGreaterThan(250);
+    expect(measured.svgHeight!).toBeLessThanOrEqual(measured.frameHeight + 4);
+  });
+
+  it("switching back to a content payload resumes reporting", async () => {
+    await page.evaluate(() => window.__applyHeights("correct"));
+    await mountAndWait("#embed", { height: 300 });
+    await renderAndSettle({ payload: CHART }, 1200);
+    const msgs = await renderAndSettle({ payload: KPI }, 1200);
+    const box = await page.evaluate(() => window.__frameBox());
+    await page.evaluate(() => window.__applyHeights(false));
+    const content = msgs.filter((m) => m.type === "bonnard:size" && m.data.sizing === "content");
+    expect(content.length).toBeGreaterThanOrEqual(1);
+    expect(box.height).toBeLessThan(120);
+  });
+
+  it("sends the fill release only once per episode", async () => {
+    await mountAndWait("#embed", { height: 300 });
+    const first = await renderAndSettle({ payload: CHART }, 1200);
+    expect(first.filter((m) => m.type === "bonnard:size" && m.data.sizing === "fill")).toHaveLength(1);
+    // A second fill render is still the same fill episode: no repeat release.
+    const second = await renderAndSettle({ payload: CHART }, 1200);
+    expect(second.filter((m) => m.type === "bonnard:size" && m.data.sizing === "fill")).toHaveLength(0);
+  });
+
+  it("a failed render returns to the placeholder without reporting a height", async () => {
+    await page.evaluate(() => window.__applyHeights("naive"));
+    await mountAndWait("#embed", { height: 300 });
+    await renderAndSettle({ payload: CHART }, 1200);
+    // An invalid payload is refused before render, so the chart stays and no height is reported.
+    const msgs = await renderAndSettle({ payload: { type: "text" }, renderId: "bad" }, 900);
+    const box = await page.evaluate(() => window.__frameBox());
+    await page.evaluate(() => window.__applyHeights(false));
+    expect(msgs.find((m) => m.type === "bonnard:error")).toBeTruthy();
+    expect(msgs.filter((m) => m.type === "bonnard:size" && m.data.sizing === "content")).toEqual([]);
+    expect(box.height).toBe(300);
+  });
 });
 
 describe("embed mode: payload validation", () => {

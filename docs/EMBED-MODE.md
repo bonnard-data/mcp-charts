@@ -37,8 +37,21 @@ import { EMBED_PROTOCOL_VERSION, EMBED_LIMITS } from "@bonnard/mcp-charts";
 Embed one cell. The container decides the size; `sandbox="allow-scripts"` is all the widget needs.
 
 ```html
-<div class="my-card" style="height: 260px">
-  <iframe id="rev" src="/chart-widget#embed" sandbox="allow-scripts" style="width: 100%; height: 100%; border: 0"></iframe>
+<!-- The container owns the height; the frame fills it via a stylesheet rule, so releasing an
+     applied inline height falls back to the container rather than to the iframe default. -->
+<style>
+  .my-card {
+    height: 260px;
+  }
+  .my-card iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+</style>
+<div class="my-card">
+  <iframe id="rev" src="/chart-widget#embed" sandbox="allow-scripts"></iframe>
 </div>
 
 <script>
@@ -53,7 +66,10 @@ Embed one cell. The container decides the size; `sandbox="allow-scripts"` is all
       frame.contentWindow.postMessage({ type: "bonnard:render", payload: spec, theme: "light" }, "*");
     }
     if (e.data?.type === "bonnard:size") {
-      frame.style.height = e.data.height + "px"; // content-height kinds: KPI, text, table
+      // Always branch on `sizing`. "content" carries a height to apply; "fill" means release any
+      // height you applied and let your own layout decide, because a chart has no intrinsic height.
+      if (e.data.sizing === "content") frame.style.height = e.data.height + "px";
+      else frame.style.removeProperty("height");
     }
     if (e.data?.type === "bonnard:error") {
       console.warn("chart render refused:", e.data.code, e.data.message);
@@ -121,7 +137,8 @@ whole grid, which would spill other cells into your layout.
 
 ```ts
 { type: "bonnard:ready", protocolVersion: 1 }
-{ type: "bonnard:size", height: number, width: number, sizing: "content" }
+{ type: "bonnard:size", sizing: "content", height: number, width: number }
+{ type: "bonnard:size", sizing: "fill",    height: null,   width: number }
 { type: "bonnard:error", code: BonnardErrorCode, message: string, renderId?: string }
 ```
 
@@ -140,35 +157,60 @@ notes, and nesting depth. A payload past any bound is refused whole rather than 
 ## Sizing
 
 Charts and intrinsic cells size differently, so embed mode handles them differently, and it tells you
-which one you have.
-
-**Charts fill their container.** A chart has no intrinsic height, so you decide: give the iframe a
-height and the chart takes all of it at 1:1, with no scaling. If you forget to size the container, a
-240px minimum keeps the chart visible instead of collapsing it to nothing. A fill chart sends **no**
-`bonnard:size` message at all, so there is nothing to feed back.
-
-**KPI, text, and table cells are content-height** and report their measurement:
+which one you have. Every `bonnard:size` message carries a `sizing` discriminant, and you must branch
+on it:
 
 ```js
-if (e.data?.type === "bonnard:size") frame.style.height = e.data.height + "px";
+if (e.data?.type === "bonnard:size") {
+  if (e.data.sizing === "content") frame.style.height = e.data.height + "px";
+  else frame.style.removeProperty("height"); // sizing: "fill"
+}
 ```
 
-Every size message carries `sizing: "content"`, so you can apply it unconditionally.
+**KPI, text, and table cells are content-height.** They report `sizing: "content"` with a measured
+`height`. Apply it to the frame.
 
-This follows the iframe-resizer convention: the child measures and posts, you opt in by listening. It
-works from an opaque origin because the measurement happens inside the frame; you never need
-`allow-same-origin`.
+**Charts fill their container.** A chart has no intrinsic height, so only you can decide it: give the
+container a height and the chart takes all of it at 1:1, with no scaling. A chart reports
+`sizing: "fill"` with `height: null`, which means *release any height you previously applied for this
+frame* and fall back to your own layout height. It never reports a measured height, so there is
+nothing to feed back.
+
+Give the frame its height through a stylesheet rule on a sized container (`height: 100%` of a
+`260px` card) rather than an inline style. Then releasing the inline height the widget asked you to
+apply returns the frame to the container's height, instead of collapsing to the iframe default.
+
+### Why the release message exists
+
+Without it, this sequence stranded a frame at the wrong height:
+
+1. You render a KPI. The widget reports `content` / 45px, you apply it, the frame shrinks to 45px.
+2. You then render a chart into the same frame. It is fill-sized, so it reports no height.
+3. The frame is still 45px, the chart fills 45px, and nothing ever tells you to let go.
+
+The `sizing: "fill"` message closes that gap. The widget also stays silent until a payload has
+actually rendered: the "waiting for chart data" placeholder is content-shaped, but its height says
+nothing about the payload that is coming, so reporting it would shrink your frame before the first
+chart ever arrived.
+
+### Loop safety
+
+Only content-height payloads report a height, and in content mode `html`, `body`, and `#root` stay at
+`height: auto`. A measurement therefore depends on the content, never on the height you just wrote
+back, so there is no loop to converge: the value you apply cannot change the next measurement. Fill
+charts, whose height *is* whatever you set, report no height at all.
 
 Reports fire after the first paint, after every re-render, and whenever a `ResizeObserver` on the
 content sees a change (fonts loading, text rewrapping). They are coalesced to one message per
 animation frame and suppressed when the measurement has not changed, so a stable cell goes quiet.
 
-**Why applying every report is safe.** Only content-height payloads report, and in content mode
-`html`, `body`, and `#root` stay at `height: auto`. The measurement therefore depends on the content,
-never on the height you just wrote back, so there is no loop to converge: the value you apply cannot
-change the next measurement. Fill charts, whose height *is* whatever you set, report nothing at all.
-This is covered by a browser test that applies every reported height and asserts the report count
-stops (wrapped text and scrollbar cases included).
+This follows the iframe-resizer convention: the child measures and posts, you opt in by listening. It
+works from an opaque origin because the measurement happens inside the frame; you never need
+`allow-same-origin`.
+
+One caveat when testing: Chrome throttles `requestAnimationFrame` for offscreen cross-origin iframes,
+and the reporter is rAF-coalesced, so a frame scrolled out of view may report nothing until it is
+visible. That is browser throttling, not the widget going quiet.
 
 ## Theme tokens
 
@@ -268,7 +310,8 @@ The posture is the same one the MCP path ships with, and embed mode does not rel
   documented fields.
 - The `EmbedTokens` keys, and the exported types (`BonnardRenderMessage`, `BonnardWidgetMessage`,
   `BonnardErrorCode`, `EmbedPayload`) plus `EMBED_PROTOCOL_VERSION`.
-- Which payload kinds report `bonnard:size` (content) and which report nothing (fill charts).
+- The `sizing` discriminant on `bonnard:size`: `content` carries a height to apply, `fill` carries
+  `height: null` and means release. Which payload kinds are which.
 - Selection failing closed: an unusable `item` / `itemId` is an error, not a whole-grid fallback.
 - The `ChartSpec`, `DashboardSpec`, and `DashboardItem` payload shapes.
 

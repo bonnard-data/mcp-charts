@@ -14,9 +14,17 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WIDGET_PATH = join(here, "..", "dist", "index.html");
 
 /** The parent page: an empty stage plus the helpers the tests drive it with. */
+// The stage sits first in the body and the viewport is tall enough to contain it, so a mounted
+// frame is ON SCREEN. Chrome throttles requestAnimationFrame for offscreen cross-origin frames, and
+// the size reporter is rAF-coalesced, so an offscreen frame would report nothing at all.
 const PARENT_HTML = `<!doctype html>
-<html><head><meta charset="utf-8"><title>embed test parent</title></head>
-<body><div id="box" style="width:400px;height:260px"></div></body></html>`;
+<html><head><meta charset="utf-8"><title>embed test parent</title>
+<style>body{margin:0}#box{width:400px;height:260px}
+/* The container owns the height and the frame fills it, which is the posture the docs recommend.
+   A stylesheet rule (not an inline style) is what lets the parent RELEASE an applied inline height
+   and fall back to the container, instead of dropping to the iframe default of ~150px. */
+#box iframe{width:100%;height:100%;border:0;display:block}</style></head>
+<body><div id="box"></div></body></html>`;
 
 export function widgetHtml(): string {
   if (!existsSync(WIDGET_PATH)) {
@@ -137,8 +145,15 @@ declare global {
     __mount: (hash: string, opts?: { sandbox?: boolean; height?: number }) => Promise<void>;
     __send: (message: unknown) => void;
     __waitReady: (timeoutMs?: number) => Promise<number | null>;
-    __applyHeights: (on: boolean) => void;
+    /**
+     * Drive the parent's size handling.
+     * `naive` applies `height` unconditionally (the handler docs shipped in 0.3.0).
+     * `correct` branches on `sizing` and releases the height when the payload fills.
+     */
+    __applyHeights: (mode: false | "naive" | "correct") => void;
     __frameState: () => Record<string, unknown>;
+    /** The frame's laid-out height, and the inline height the parent has applied. */
+    __frameBox: () => { height: number; styleHeight: string };
   }
 }
 
@@ -150,7 +165,7 @@ export async function installDriver(page: Page, baseUrl: string): Promise<void> 
   await page.evaluate((base: string) => {
     let frame: HTMLIFrameElement | null = null;
     let t0 = performance.now();
-    let applyHeights = false;
+    let applyHeights: false | "naive" | "correct" = false;
     window.__log = [];
 
     window.addEventListener("message", (e) => {
@@ -159,7 +174,15 @@ export async function installDriver(page: Page, baseUrl: string): Promise<void> 
       const type = typeof d.type === "string" ? d.type : typeof d.method === "string" ? `rpc:${d.method}` : "(untyped)";
       window.__log.push({ type, data: d, t: Math.round(performance.now() - t0), fromFrame });
       if (applyHeights && fromFrame && d.type === "bonnard:size" && frame) {
-        frame.style.height = `${d.height as number}px`;
+        if (applyHeights === "naive") {
+          // Verbatim the handler the docs used to show. Kept so a test can prove it is now safe.
+          frame.style.height = `${d.height as number}px`;
+        } else if (d.sizing === "content") {
+          frame.style.height = `${d.height as number}px`;
+        } else {
+          // sizing: "fill" means release: fall back to the parent's own layout height.
+          frame.style.removeProperty("height");
+        }
       }
     });
 
@@ -167,11 +190,13 @@ export async function installDriver(page: Page, baseUrl: string): Promise<void> 
       new Promise<void>((resolve) => {
         const box = document.getElementById("box")!;
         box.innerHTML = "";
+        box.style.height = `${opts.height ?? 260}px`;
         window.__log = [];
         t0 = performance.now();
         const f = document.createElement("iframe");
         if (opts.sandbox !== false) f.setAttribute("sandbox", "allow-scripts");
-        f.style.cssText = `width:100%;height:${opts.height ?? 260}px;border:0`;
+        // No inline height: the stage's `#box iframe` rule supplies `height:100%`, so releasing an
+        // applied inline height returns the frame to the container's height.
         f.addEventListener("load", () => resolve());
         f.src = `${base}/widget.html${hash}`;
         box.appendChild(f);
@@ -192,9 +217,14 @@ export async function installDriver(page: Page, baseUrl: string): Promise<void> 
         check();
       });
 
-    window.__applyHeights = (on) => {
-      applyHeights = on;
+    window.__applyHeights = (mode) => {
+      applyHeights = mode;
     };
+
+    window.__frameBox = () => ({
+      height: Math.round(frame!.getBoundingClientRect().height),
+      styleHeight: frame!.style.height,
+    });
 
     // Same-origin only: lets a test read `data-embed`, computed padding, and rendered DOM. The
     // embed logic itself is origin-independent, which the sandboxed cases assert separately.

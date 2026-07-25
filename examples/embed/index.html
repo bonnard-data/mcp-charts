@@ -194,9 +194,11 @@
       function render(pane) {
         const fx = embedFixtures.find((f) => f.name === pane.select.value);
         if (!fx) return;
-        pane.sizing = fx.sizing;
-        pane.boxEl.className = fx.sizing === "fill" ? "frame-fill" : "frame-content";
-        pane.metaEl.textContent = fx.sizing === "fill" ? "fill" : "waiting";
+        // Start from the card's own height and drop any height applied for a previous payload. The
+        // widget tells us which sizing mode this payload wants, so we do not have to guess here.
+        pane.boxEl.className = "frame-fill";
+        pane.boxEl.style.removeProperty("height");
+        pane.metaEl.textContent = "waiting";
         pane.frameEl.contentWindow?.postMessage(
           {
             type: "bonnard:render",
@@ -215,11 +217,19 @@
           // the only identity you have.
           if (e.source !== pane.frameEl.contentWindow) continue;
           if (e.data?.type === "bonnard:ready") render(pane);
-          // Only content cells report a size, and every report carries sizing:"content", so it is
-          // safe to apply unconditionally. A fill chart sends nothing at all.
+          // Branch on `sizing`: "content" carries a height to apply, "fill" means release ours and
+          // let the card decide. Applying `height` unconditionally would squash a chart into
+          // whatever the last content cell measured.
           if (e.data?.type === "bonnard:size") {
-            pane.boxEl.style.height = e.data.height + "px";
-            pane.metaEl.textContent = `${e.data.height} x ${e.data.width}`;
+            if (e.data.sizing === "content") {
+              pane.boxEl.className = "frame-content";
+              pane.boxEl.style.height = e.data.height + "px";
+              pane.metaEl.textContent = `${e.data.height} x ${e.data.width}`;
+            } else {
+              pane.boxEl.className = "frame-fill";
+              pane.boxEl.style.removeProperty("height");
+              pane.metaEl.textContent = "fill (card height)";
+            }
           }
           if (e.data?.type === "bonnard:error") {
             pane.metaEl.textContent = `error: ${e.data.code}`;
