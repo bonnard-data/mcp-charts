@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+          # No install step here, so skip the dependency cache: it would look for pnpm (the repo has
+          # a pnpm lockfile) and fail, since this job never needs the workspace deps.
+          package-manager-cache: false
       - name: Deprecate
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
