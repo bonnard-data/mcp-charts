@@ -1,0 +1,32 @@
+name: Deprecate a version
+
+# Manual-only. `npm deprecate` is an npm write that the release workflow does not perform, and it
+# needs the same NPM_TOKEN, so run it here rather than from a laptop that is not logged in.
+# Clear a deprecation by dispatching with an empty message.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact version to deprecate, for example 0.3.0
+        required: true
+      message:
+        description: Reason shown on install. Empty clears the deprecation.
+        required: false
+        default: ''
+
+jobs:
+  deprecate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Deprecate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm deprecate "@bonnard/mcp-charts@${{ inputs.version }}" "${{ inputs.message }}"
+          echo "Deprecation state for ${{ inputs.version }}:"
+          npm view "@bonnard/mcp-charts@${{ inputs.version }}" deprecated || true
