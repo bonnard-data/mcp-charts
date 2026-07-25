@@ -1,6 +1,7 @@
 // Embed mode: fragment parsing, token validation, the size-report protocol, and the chrome-less
-// single-cell markup. Structural (linkedom) in the same style as dashboard.test.ts; the real-pixel
-// checks live in examples/embed/index.html.
+// single-cell markup. Structural (linkedom) in the same style as dashboard.test.ts. The behavioural
+// checks that need real layout and a real origin (ready timing, `data-embed`, fill/content sizing,
+// source filtering) live in embed-browser.test.ts, against the built widget.
 import { describe, it, expect, vi } from "vitest";
 import { parseHTML } from "linkedom";
 import { dashboardFixtures } from "@bonnard/mcp-charts/fixtures";
@@ -13,6 +14,7 @@ import {
   isDashboardSpec,
 } from "../src/dashboard.js";
 import { EMBED_PROTOCOL_VERSION, SizeReporter, applyTokens, parseEmbedFragment, sanitizeTokens } from "../src/embed.js";
+import { EMBED_LIMITS, selectItem, validatePayload } from "../src/embed-protocol.js";
 import { embedFixtures } from "./embed-fixtures.js";
 
 const spec = (name: string): DashboardSpec => dashboardFixtures.find((f) => f.name === name)!.spec;
@@ -81,7 +83,6 @@ describe("sanitizeTokens", () => {
         bg: "#fff",
         fg: "rgb(10 10 10)",
         muted: "#6b7280",
-        grid: "#eee",
         border: "#eee",
         fontFamily: "Inter, system-ui, sans-serif",
       }),
@@ -89,25 +90,102 @@ describe("sanitizeTokens", () => {
       bg: "#fff",
       fg: "rgb(10 10 10)",
       muted: "#6b7280",
-      grid: "#eee",
       border: "#eee",
       fontFamily: "Inter, system-ui, sans-serif",
     });
   });
 
-  it("drops unknown keys", () => {
-    expect(sanitizeTokens({ bg: "#fff", accent: "#f00", palette: ["#f00"], radius: "8px" })).toEqual({ bg: "#fff" });
+  it("drops unknown keys, including the retired `grid` token", () => {
+    expect(sanitizeTokens({ bg: "#fff", grid: "#eee", accent: "#f00", palette: ["#f00"], radius: "8px" })).toEqual({
+      bg: "#fff",
+    });
   });
 
-  it("drops non-strings, blanks, over-long values, and CSS-structural characters", () => {
+  it("accepts the colour grammar: hex, keywords, and numeric colour functions", () => {
+    for (const bg of [
+      "#fff",
+      "#ffff",
+      "#ffffff",
+      "#ffffffaa",
+      "red",
+      "transparent",
+      "currentcolor",
+      "rgb(1 2 3)",
+      "rgb(1,2,3)",
+      "rgba(1,2,3,0.5)",
+      "rgb(1 2 3 / 50%)",
+      "hsl(210 40% 98%)",
+      "oklch(0.7 0.1 200)",
+      "lab(50% 40 59.5)",
+    ]) {
+      expect(sanitizeTokens({ bg }), bg).toEqual({ bg });
+    }
+  });
+
+  // The 0.3.0 bypass: the denylist only rejected a literal `url(`, but CSS function names allow
+  // escapes, so `u\72l(...)` tokenized as `url()` and reached the network through `background`.
+  it("rejects every URL-bearing and escape-based form", () => {
+    for (const bg of [
+      "u\\72l(https://attacker.example/pixel)",
+      "\\75rl(x)",
+      "url(https://attacker.example/x.png)",
+      "URL(x)",
+      "image-set('https://attacker.example/x.png')",
+      "-webkit-image-set(url(x) 1x)",
+      "linear-gradient(red, blue)",
+      "var(--fg)",
+      "attr(data-x)",
+      "element(#foo)",
+    ]) {
+      expect(sanitizeTokens({ bg }), bg).toEqual({});
+    }
+  });
+
+  it("rejects structural, comment, control, and over-long values", () => {
+    for (const bg of [
+      "red; background: url(x)",
+      "red} body {color:blue",
+      "expression(alert(1))",
+      "@import 'x'",
+      "rgb(0,0,0)/*c*/",
+      "/*x*/red",
+      "red\nbackground:url(x)",
+      "red\tblue",
+      "red\u0000",
+      "#" + "f".repeat(200),
+      "rgb(1 2)",
+      "rgb(1 2 3 4 5)",
+      "notacolour",
+      "rgb(var(--x))",
+    ]) {
+      expect(sanitizeTokens({ bg }), bg).toEqual({});
+    }
+  });
+
+  it("drops non-strings and blanks", () => {
     expect(sanitizeTokens({ bg: 123 })).toEqual({});
     expect(sanitizeTokens({ bg: "   " })).toEqual({});
-    expect(sanitizeTokens({ bg: "#" + "f".repeat(200) })).toEqual({});
-    expect(sanitizeTokens({ bg: "red; background: url(x)" })).toEqual({});
-    expect(sanitizeTokens({ fg: "red} body {color:blue" })).toEqual({});
-    expect(sanitizeTokens({ bg: "url(https://evil.example/x.png)" })).toEqual({});
-    expect(sanitizeTokens({ fg: "expression(alert(1))" })).toEqual({});
-    expect(sanitizeTokens({ bg: "@import 'x'" })).toEqual({});
+  });
+
+  it("accepts a conservative fontFamily grammar and rejects the rest", () => {
+    for (const fontFamily of ["Inter", "Inter, system-ui, sans-serif", '"Helvetica Neue", Arial', "Segoe UI"]) {
+      expect(sanitizeTokens({ fontFamily }), fontFamily).toEqual({ fontFamily });
+    }
+    for (const fontFamily of [
+      "u\\72l(x)",
+      "Inter;color:red",
+      "local('x')",
+      "Inter\n,serif",
+      "Inter, ",
+      "@font-face",
+      'Inter"x',
+    ]) {
+      expect(sanitizeTokens({ fontFamily }), fontFamily).toEqual({});
+    }
+  });
+
+  it("a rejected token does not discard the valid ones alongside it", () => {
+    expect(sanitizeTokens({ bg: "url(x)", fg: "#fafafa" })).toEqual({ fg: "#fafafa" });
   });
 
   it("tolerates a non-object payload", () => {
@@ -132,7 +210,8 @@ describe("applyTokens", () => {
     applyTokens(el, sanitizeTokens({ bg: "#101010", fg: "#fafafa", fontFamily: "Inter" }));
     expect(el.style.getPropertyValue("--bg")).toBe("#101010");
     expect(el.style.getPropertyValue("--fg")).toBe("#fafafa");
-    expect(el.style.getPropertyValue("font-family")).toBe("Inter");
+    // A custom property, matching the documented "tokens are set as CSS custom properties" claim.
+    expect(el.style.getPropertyValue("--font-family")).toBe("Inter");
   });
 
   it("clears previously-set tokens when a later render omits them", () => {
@@ -265,11 +344,12 @@ describe("renderSingleItem — chrome-less cell", () => {
     expect(mount.innerHTML).toBe("");
   });
 
-  it("never draws the widget's own title (the consumer's header is the one header)", () => {
+  // The cell markup itself carries no title: main.ts composes one above it when `titled=true`, for
+  // every single-cell shape. embed-browser.test.ts asserts the composed result in a real frame.
+  it("draws no title of its own (main.ts owns single-cell title composition)", () => {
     const d = doc(renderSingleItem({ type: "chart", spec: chartSpec }));
     expect(d.querySelector(".title")).toBeNull();
     expect(d.querySelector(".dash-title")).toBeNull();
-    expect(renderSingleItem({ type: "chart", spec: chartSpec })).not.toContain("Revenue by region");
   });
 
   it("notes render by default and drop under notes=false", () => {
@@ -317,8 +397,24 @@ describe("item selection — DashboardSpec + item: n", () => {
     expect(kindAt(3)).toBe("solo chart");
   });
 
-  it("an out-of-range index selects nothing, so the whole grid renders instead", () => {
-    expect(mixed.items[99]).toBeUndefined();
+  it("fails closed on an unusable selector instead of falling back to the whole grid", () => {
+    for (const item of [-1, 99, 1.5, "1", true]) {
+      const picked = selectItem(mixed, { item });
+      expect(picked && "code" in picked, String(item)).toBe(true);
+    }
+    expect(selectItem(mixed, { itemId: "nope" })).toMatchObject({ code: "item-not-found" });
+    expect(selectItem(mixed, { itemId: "" })).toMatchObject({ code: "invalid-item-selector" });
+  });
+
+  it("no selector at all means the whole dashboard", () => {
+    expect(selectItem(mixed, {})).toBeNull();
+    expect(selectItem(mixed, { item: undefined })).toBeNull();
+  });
+
+  it("selects by index and by id", () => {
+    expect(selectItem(mixed, { item: 1 })).toEqual({ item: mixed.items[1] });
+    const withId = { items: [{ id: "a", type: "text" as const, text: "x" }] };
+    expect(selectItem(withId, { itemId: "a" })).toEqual({ item: withId.items[0] });
   });
 });
 
@@ -350,7 +446,8 @@ describe("renderDashboardShell — embed options", () => {
 });
 
 describe("protocol version", () => {
-  it("bonnard:ready carries version 1", () => {
+  // The emitted `bonnard:ready` message is asserted in embed-browser.test.ts; this pins the value.
+  it("is 1", () => {
     expect(EMBED_PROTOCOL_VERSION).toBe(1);
   });
 });
@@ -393,5 +490,65 @@ describe("embed fixtures — markup snapshots", () => {
       const isFillChart = !!spec && spec.chartType !== "table";
       expect(fx.sizing).toBe(isFillChart ? "fill" : "content");
     }
+  });
+});
+
+describe("validatePayload — runtime guards and caps", () => {
+  it("accepts the three documented payload shapes", () => {
+    expect(validatePayload(chartSpec)).toBeNull();
+    expect(validatePayload(kpi)).toBeNull();
+    expect(validatePayload(spec("mixed"))).toBeNull();
+    expect(validatePayload({ type: "chart", spec: chartSpec })).toBeNull();
+    expect(validatePayload({ type: "text", text: "hi" })).toBeNull();
+  });
+
+  // Each of these passed the 0.3.0 guards and then threw or rendered "undefined".
+  it("refuses the shapes that used to throw or render nonsense", () => {
+    expect(validatePayload({ items: [null] })).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload({ type: "text" })).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload({ data: [{}] })).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload({ type: "kpi", value: 1 })).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload(null)).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload("dark")).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload([1, 2])).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload({ items: [{ spec: { title: "not a chart" } }] })).toMatchObject({ code: "invalid-payload" });
+  });
+
+  it("requires the fields each chart kind actually renders from", () => {
+    expect(validatePayload({ chartType: "bar", data: [{ a: 1 }] })).toMatchObject({ code: "invalid-payload" });
+    expect(validatePayload({ chartType: "bar", data: [{ a: 1 }], x: 5, series: [{ key: "a" }] })).toMatchObject({
+      code: "invalid-payload",
+    });
+    // A table needs no series.
+    expect(validatePayload({ chartType: "table", data: [{ a: 1 }], columns: [{ key: "a" }] })).toBeNull();
+  });
+
+  it("enforces the caps", () => {
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ i }));
+    expect(
+      validatePayload({ chartType: "bar", x: "i", series: [{ key: "i" }], data: rows(EMBED_LIMITS.maxRows + 1) }),
+    ).toMatchObject({ code: "payload-too-large" });
+    expect(
+      validatePayload({
+        items: Array.from({ length: EMBED_LIMITS.maxItems + 1 }, () => ({ type: "text", text: "x" })),
+      }),
+    ).toMatchObject({ code: "payload-too-large" });
+    expect(validatePayload({ type: "text", text: "x".repeat(EMBED_LIMITS.maxStringLength + 1) })).toMatchObject({
+      code: "payload-too-large",
+    });
+    expect(
+      validatePayload({
+        chartType: "bar",
+        x: "i",
+        data: [{ i: 1 }],
+        series: Array.from({ length: EMBED_LIMITS.maxSeries + 1 }, (_, i) => ({ key: `s${i}` })),
+      }),
+    ).toMatchObject({ code: "payload-too-large" });
+  });
+
+  it("refuses a deeply nested payload rather than recursing without bound", () => {
+    let nested: Record<string, unknown> = { type: "text", text: "deep" };
+    for (let i = 0; i < 40; i++) nested = { nested };
+    expect(validatePayload(nested)).toMatchObject({ code: "payload-too-large" });
   });
 });
