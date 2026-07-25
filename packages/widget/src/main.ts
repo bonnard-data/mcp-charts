@@ -60,8 +60,20 @@ if (embed) {
 // One reporter, driven only while the current payload is content-sized. A fill payload's height is
 // whatever the parent set, so reporting it would echo the parent's own value back and close the
 // feedback loop the protocol exists to avoid.
-const sizeReporter = embed ? new SizeReporter(root, (m) => postToParent({ ...m, sizing: "content" })) : null;
+const sizeReporter = embed
+  ? new SizeReporter(root, (m) => {
+      // The observer can fire for the pre-render placeholder (fonts settling, the frame being
+      // resized); suppress it until there is a real payload whose height means something.
+      if (rendered && sizing === "content") postToParent({ ...m, sizing: "content" });
+    })
+  : null;
 let sizing: EmbedSizing = "content";
+// Nothing is reported until a payload has actually been rendered. The pre-render waiting state is
+// content-shaped but says nothing about the payload to come: reporting its height let a parent
+// following the documented handler shrink the frame to ~48px, and a fill chart then filled that.
+let rendered = false;
+// Whether the parent has been told the current payload is fill-sized, so the release is sent once.
+let announcedFill = false;
 
 function postToParent(message: BonnardWidgetMessage): void {
   parent.postMessage(message, "*");
@@ -80,14 +92,27 @@ function teardown() {
 
 /**
  * Switch the sizing mode and keep the DOM and the reporter in step. `fill` pins the height chain to
- * the iframe viewport and reports nothing; `content` leaves html/body at auto and measures.
+ * the iframe viewport and measures nothing; `content` leaves html/body at auto and measures.
+ *
+ * Entering `fill` announces it, so a parent that previously applied a content height can release it.
+ * Without that signal a frame stayed stuck at the last content measurement and squashed the chart.
  */
 function setSizing(next: EmbedSizing) {
   sizing = next;
   if (!embed) return;
   document.documentElement.dataset.sizing = next;
-  if (next === "fill") sizeReporter?.stop();
-  else sizeReporter?.start();
+  if (next === "fill") {
+    sizeReporter?.stop();
+    // Once per fill episode. The parent may have applied a height for a previous content payload,
+    // or for the pre-render state before it knew what was coming, and needs to let go of it.
+    if (rendered && !announcedFill) {
+      announcedFill = true;
+      postToParent({ type: "bonnard:size", sizing: "fill", height: null, width: Math.ceil(root.scrollWidth) });
+    }
+  } else {
+    announcedFill = false;
+    sizeReporter?.start();
+  }
 }
 
 // A chart that is not a table has no intrinsic height, so it fills the container. Everything else
@@ -121,15 +146,21 @@ function paint(structured: unknown, fallbackText?: string, selected?: DashboardI
     teardown();
     lastPayload = null;
     lastItem = undefined;
+    // Real content the parent can size to, unlike the bare waiting state below.
+    rendered = true;
     root.innerHTML = `<pre class="fallback">${esc(fallbackText)}</pre>`;
   } else {
     teardown();
     lastPayload = null;
     lastItem = undefined;
+    // The pre-render placeholder. Deliberately does NOT count as rendered: its height must never
+    // drive the parent's frame, since the payload it is waiting for may well be fill-sized.
+    rendered = false;
     root.innerHTML = `<div class="empty">Waiting for chart data…</div>`;
   }
+  if (lastPayload) rendered = true;
   setSizing(sizingForPayload(lastItem ?? lastPayload));
-  if (sizing === "content") sizeReporter?.schedule();
+  if (rendered && sizing === "content") sizeReporter?.schedule();
 }
 
 // Mount one ECharts instance (with its own ResizeObserver) into a target element.
@@ -279,10 +310,9 @@ function handleRender(d: Record<string, unknown>): void {
   try {
     paint(payload, undefined, selected);
   } catch (e) {
-    teardown();
-    lastPayload = null;
-    lastItem = undefined;
-    root.innerHTML = `<div class="empty">Waiting for chart data…</div>`;
+    // Back to the placeholder via paint(), so `rendered` and the sizing mode reset together and the
+    // dead frame cannot keep reporting a height the parent would apply.
+    paint(undefined);
     postError("render-failed", e instanceof Error ? e.message : String(e), renderId);
   }
 }

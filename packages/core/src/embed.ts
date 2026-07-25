@@ -57,15 +57,34 @@ export interface BonnardReadyMessage {
 }
 
 /**
- * Widget to parent: the measured content height. Only sent for content-sizing payloads (KPI, text,
- * table, empty state, fallback). A fill-sizing chart never reports a size, because its height is
- * whatever the parent set.
+ * Widget to parent: how the current payload wants to be sized. Discriminated on `sizing`.
+ *
+ * `content` carries a measured height to apply (KPI, text, table). `fill` carries `height: null` and
+ * means "release any height you applied for me and use your own layout height": a chart has no
+ * intrinsic height, so only the parent can decide it.
+ *
+ * Always branch on `sizing`. Applying `height` unconditionally would collapse a fill chart to
+ * whatever the previous content measurement was.
  */
-export interface BonnardSizeMessage {
+export type BonnardSizeMessage = BonnardContentSizeMessage | BonnardFillSizeMessage;
+
+/** The measured content height of an intrinsic-height payload. Apply it to the frame. */
+export interface BonnardContentSizeMessage {
   type: "bonnard:size";
+  sizing: "content";
   height: number;
   width: number;
-  sizing: "content";
+}
+
+/**
+ * The current payload fills its container. Release any height previously applied for this frame and
+ * fall back to your own layout height. No content height is measured, so `height` is always null.
+ */
+export interface BonnardFillSizeMessage {
+  type: "bonnard:size";
+  sizing: "fill";
+  height: null;
+  width: number;
 }
 
 /** Why a render was refused. Stable strings, safe to branch on. */
@@ -86,6 +105,9 @@ export interface BonnardErrorMessage {
 
 /** Every message the widget can send its parent in embed mode. */
 export type BonnardWidgetMessage = BonnardReadyMessage | BonnardSizeMessage | BonnardErrorMessage;
+
+/** How a payload is sized: `fill` takes the container, `content` measures itself. */
+export type EmbedSizing = "fill" | "content";
 
 /** Every message a parent can send the widget in embed mode. */
 export type BonnardParentMessage = BonnardRenderMessage;

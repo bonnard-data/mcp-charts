@@ -66,9 +66,12 @@ export { EMBED_PROTOCOL_VERSION, EMBED_LIMITS } from "./embed.js";
 export type {
   EmbedTokens,
   EmbedPayload,
+  EmbedSizing,
   BonnardRenderMessage,
   BonnardReadyMessage,
   BonnardSizeMessage,
+  BonnardContentSizeMessage,
+  BonnardFillSizeMessage,
   BonnardErrorMessage,
   BonnardErrorCode,
   BonnardWidgetMessage,

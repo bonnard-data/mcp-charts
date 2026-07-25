@@ -21,7 +21,8 @@ export type BonnardErrorCode =
 /** Every message the widget can post its parent in embed mode. Mirrors core's union. */
 export type BonnardWidgetMessage =
   | { type: "bonnard:ready"; protocolVersion: number }
-  | { type: "bonnard:size"; height: number; width: number; sizing: "content" }
+  | { type: "bonnard:size"; sizing: "content"; height: number; width: number }
+  | { type: "bonnard:size"; sizing: "fill"; height: null; width: number }
   | { type: "bonnard:error"; code: BonnardErrorCode; message: string; renderId?: string };
 
 /** Bounds on a render payload. Mirrors core's EMBED_LIMITS; kept in sync by a parity test. */
