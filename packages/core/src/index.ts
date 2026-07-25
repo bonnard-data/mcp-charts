@@ -60,6 +60,21 @@ export type { AddChartsOptions } from "./charts.js";
 export { WIDGET_HTML } from "./generated/widget-html.js";
 export { WIDGET_META, VIEW_OUTPUT_SCHEMA } from "./views.js";
 
+// Embed mode's wire contract, for a consumer driving `WIDGET_HTML#embed` over postMessage.
+// See docs/EMBED-MODE.md.
+export { EMBED_PROTOCOL_VERSION, EMBED_LIMITS } from "./embed.js";
+export type {
+  EmbedTokens,
+  EmbedPayload,
+  BonnardRenderMessage,
+  BonnardReadyMessage,
+  BonnardSizeMessage,
+  BonnardErrorMessage,
+  BonnardErrorCode,
+  BonnardWidgetMessage,
+  BonnardParentMessage,
+} from "./embed.js";
+
 // Adapter authoring kit: turn a SQL result (rows + column types) into typed ChartData, plus the
 // read-only backstop. Use these to write a runSql for any warehouse the bundled adapters don't cover.
 export { buildChartData, defaultNormalizeCell, assertReadOnlySql } from "./adapters/sql.js";
