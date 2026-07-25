@@ -114,6 +114,39 @@ passing `render_view` an `item_id` (the ids appear in the dashboard summary). Se
 for a six-view server, the [views guide](https://docs.bonnard.dev/mcp-charts/views), and the
 [dashboards reference](https://docs.bonnard.dev/mcp-charts/dashboards) for the `DashboardSpec` shape.
 
+## Embed the widget in your own UI
+
+Embed mode renders a single chart, KPI, or table with no chrome of its own, for your own admin console or app rather than an MCP host.
+
+Serve the widget from any route, point an iframe at `#embed`, and post it a spec:
+
+```ts
+import { WIDGET_HTML } from "@bonnard/mcp-charts";
+app.get("/chart-widget", (_req, res) => res.type("html").send(WIDGET_HTML));
+```
+
+```html
+<div class="my-card" style="height: 260px">
+  <iframe id="rev" src="/chart-widget#embed" sandbox="allow-scripts" style="width: 100%; height: 100%; border: 0"></iframe>
+</div>
+
+<script>
+  const frame = document.getElementById("rev");
+  window.addEventListener("message", (e) => {
+    if (e.source !== frame.contentWindow) return;
+    if (e.data?.type === "bonnard:ready")
+      frame.contentWindow.postMessage({ type: "bonnard:render", payload: spec, theme: "light" }, "*");
+    if (e.data?.type === "bonnard:size") frame.style.height = e.data.height + "px";
+  });
+</script>
+```
+
+`#embed` drops the widget's own padding, cell borders, and title, so your card provides the chrome. Charts fill the container you give them. KPI, text, and table cells report their content height over `bonnard:size`, so you can fit the frame to them.
+
+`payload` takes a `ChartSpec`, a bare `DashboardItem`, or a whole `DashboardSpec` with `item: n` to render just that cell. `sandbox="allow-scripts"` is all the widget needs, and theming goes through a bounded token set rather than CSS overrides.
+
+See [docs/EMBED-MODE.md](./docs/EMBED-MODE.md) for the flags, messages, tokens, and the stability contract, plus `examples/embed/` for a runnable page.
+
 ## Warehouse adapters
 
 Skip writing `runSql` by hand. Each adapter wraps your driver and maps native column types to chart roles (dimension, measure, time):

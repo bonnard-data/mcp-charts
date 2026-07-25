@@ -2,6 +2,10 @@
 
 Iterate on the chart/dashboard renderer without the build -> embed -> restart cycle.
 
+The harness is the dev-only cousin of [embed mode](./EMBED-MODE.md): same idea (a parent page drives the
+widget over postMessage), but `#harness` and the `bonnard:harness-*` messages are internal and may change
+without notice. Build against `#embed` and `bonnard:render` instead.
+
 ## One command
 
 ```bash

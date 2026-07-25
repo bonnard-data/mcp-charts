@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bonnard charts: embed mode</title>
+    <style>
+      body {
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          sans-serif;
+        margin: 24px;
+        max-width: 1000px;
+        color: #1a1a1a;
+        background: #f8f8f7;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      p,
+      label {
+        font-size: 14px;
+      }
+      code {
+        background: #ececec;
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+      .controls {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 16px 0 20px;
+      }
+      select {
+        font-size: 14px;
+        padding: 4px 8px;
+      }
+      /* The consumer's own card: this is the chrome embed mode leaves to you. */
+      .card {
+        background: #fff;
+        border: 1px solid #e2e2e0;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+      }
+      .card + .card {
+        margin-top: 20px;
+      }
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+      .card-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .card-meta {
+        font-size: 12px;
+        color: #6b7280;
+        font-variant-numeric: tabular-nums;
+      }
+      /* A chart has no intrinsic height, so the card decides. */
+      .frame-fill {
+        height: 260px;
+      }
+      /* An intrinsic cell starts small and grows to whatever bonnard:size reports. */
+      .frame-content {
+        height: 40px;
+        transition: height 120ms ease-out;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 720px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Embed mode</h1>
+    <p>
+      Two Bonnard cells inside this page's own cards. Each is an iframe on <code>#embed</code>, sandboxed with
+      <code>allow-scripts</code> only, fed a payload over <code>bonnard:render</code>. The chart fills its card; the
+      second cell auto-sizes from the <code>bonnard:size</code> reports shown next to its header.
+    </p>
+    <p>
+      Requires a root <code>pnpm build</code> first (populates <code>packages/widget/dist</code>), then serve the repo
+      root (<code>python3 -m http.server 8000</code>) and open <code>/examples/embed/</code>.
+    </p>
+
+    <div class="controls">
+      <label>
+        Left cell
+        <select id="left"></select>
+      </label>
+      <label>
+        Right cell
+        <select id="right"></select>
+      </label>
+      <label>
+        Theme
+        <select id="theme">
+          <option value="light" selected>light</option>
+          <option value="dark">dark</option>
+        </select>
+      </label>
+      <label>
+        Tokens
+        <select id="tokens">
+          <option value="none" selected>package defaults</option>
+          <option value="brand">brand palette</option>
+          <option value="invalid">an invalid token (ignored)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Your header, not the widget's</span>
+          <span class="card-meta" id="left-meta">fill</span>
+        </div>
+        <div class="frame-fill" id="left-box">
+          <iframe id="left-frame" src="../../packages/widget/dist/index.html#embed" sandbox="allow-scripts"></iframe>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Auto-sized from bonnard:size</span>
+          <span class="card-meta" id="right-meta">waiting</span>
+        </div>
+        <div class="frame-content" id="right-box">
+          <iframe id="right-frame" src="../../packages/widget/dist/index.html#embed" sandbox="allow-scripts"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { embedFixtures } from "./fixtures.js";
+
+      const themeSel = document.getElementById("theme");
+      const tokensSel = document.getElementById("tokens");
+
+      const TOKEN_SETS = {
+        none: undefined,
+        brand: { bg: "#fffdf7", fg: "#1c1917", muted: "#78716c", grid: "#e7e5e4", border: "#e7e5e4" },
+        // `background: red` is not an allowed token key, and the `;` value is rejected outright.
+        invalid: { background: "red", bg: "#fff; body { display: none }" },
+      };
+
+      const panes = [
+        { key: "left", frame: "left-frame", box: "left-box", meta: "left-meta", default: "chart" },
+        { key: "right", frame: "right-frame", box: "right-box", meta: "right-meta", default: "kpi" },
+      ].map((p) => ({
+        ...p,
+        select: document.getElementById(p.key),
+        frameEl: document.getElementById(p.frame),
+        boxEl: document.getElementById(p.box),
+        metaEl: document.getElementById(p.meta),
+      }));
+
+      for (const pane of panes) {
+        for (const fx of embedFixtures) {
+          const opt = document.createElement("option");
+          opt.value = opt.textContent = fx.name;
+          opt.selected = fx.name === pane.default;
+          pane.select.append(opt);
+        }
+      }
+
+      function render(pane) {
+        const fx = embedFixtures.find((f) => f.name === pane.select.value);
+        if (!fx) return;
+        pane.sizing = fx.sizing;
+        pane.boxEl.className = fx.sizing === "fill" ? "frame-fill" : "frame-content";
+        pane.metaEl.textContent = fx.sizing === "fill" ? "fill" : "waiting";
+        pane.frameEl.contentWindow?.postMessage(
+          {
+            type: "bonnard:render",
+            payload: fx.payload,
+            item: fx.item,
+            theme: themeSel.value,
+            tokens: TOKEN_SETS[tokensSel.value],
+          },
+          "*",
+        );
+      }
+
+      window.addEventListener("message", (e) => {
+        for (const pane of panes) {
+          // Always check the source against your own iframe: the frame is opaque-origin, so this is
+          // the only identity you have.
+          if (e.source !== pane.frameEl.contentWindow) continue;
+          if (e.data?.type === "bonnard:ready") render(pane);
+          if (e.data?.type === "bonnard:size" && pane.sizing === "content") {
+            pane.boxEl.style.height = e.data.height + "px";
+            pane.metaEl.textContent = `${e.data.height} x ${e.data.width}`;
+          }
+        }
+      });
+
+      for (const pane of panes) pane.select.addEventListener("change", () => render(pane));
+      for (const sel of [themeSel, tokensSel]) {
+        sel.addEventListener("change", () => panes.forEach(render));
+      }
+    </script>
+  </body>
+</html>
