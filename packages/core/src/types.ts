@@ -131,6 +131,7 @@ export interface ResolveOptions {
   chartType?: ChartType | "auto";
   title?: string;
   stacking?: Stacking;
+  /** Run bars horizontally (categories on the y-axis). Bars are vertical unless you set this. */
   horizontal?: boolean;
   /** Add reference lines: an average (computed) and/or a target (a value you pass). */
   reference?: { target?: number; average?: boolean };

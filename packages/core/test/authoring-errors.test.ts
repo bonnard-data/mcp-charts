@@ -330,7 +330,7 @@ describe("shape / degenerate", () => {
   });
 
   // S5: very high cardinality categorical bar. Does NOT error (the requirement): it caps to the top
-  // 30 by value and emits a note. It also flips horizontal for label readability. note-on-spec.
+  // 30 by value and emits a note. note-on-spec.
   it("S5 high-cardinality bar -> top-N cap + note, no error", () => {
     const rows = Array.from({ length: 500 }, (_, i) => ({ cat: `c${i}`, v: i }));
     const { spec } = run(() => chart(rows, { chartType: "bar" }));

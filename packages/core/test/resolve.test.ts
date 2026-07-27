@@ -478,7 +478,7 @@ describe("resolve() — edge cases", () => {
     expect(spec.data.map((r) => r.is_paid).sort()).toEqual(["No", "Yes"]);
   });
 
-  it("auto-flips a category bar to horizontal past the cardinality threshold", () => {
+  it("leaves a category bar vertical whatever the row count", () => {
     const many: ChartData = {
       rows: Array.from({ length: 10 }, (_, i) => ({ name: `cust ${i}`, revenue: 100 - i })),
       fields: [
@@ -486,7 +486,7 @@ describe("resolve() — edge cases", () => {
         { name: "revenue", role: "measure", kind: "number" },
       ],
     };
-    expect(resolve(many, { chartType: "bar" }).horizontal).toBe(true);
+    expect(resolve(many, { chartType: "bar" }).horizontal).toBeUndefined();
     const few: ChartData = {
       rows: [
         { name: "a", revenue: 1 },
@@ -498,6 +498,7 @@ describe("resolve() — edge cases", () => {
       ],
     };
     expect(resolve(few, { chartType: "bar" }).horizontal).toBeUndefined();
+    expect(resolve(many, { chartType: "bar", horizontal: true }).horizontal).toBe(true);
   });
 });
 
@@ -725,14 +726,50 @@ describe("resolve() — P0.2 numeric grouping column", () => {
     });
 
     it("does NOT auto-horizontal a time-bucketed bar, even with many buckets", () => {
-      const spec = resolve({ rows: monthlyRows }, { chartType: "bar" }); // 18 months > threshold
+      const spec = resolve({ rows: monthlyRows }, { chartType: "bar" }); // 18 months
       expect(spec.horizontal).toBeUndefined(); // time x stays vertical
     });
 
-    it("still auto-horizontals a high-cardinality CATEGORICAL bar", () => {
+    it("does NOT auto-horizontal a high-cardinality CATEGORICAL bar", () => {
       const rows = Array.from({ length: 12 }, (_, i) => ({ product: `Product ${i}`, revenue: 100 - i }));
       const spec = resolve({ rows }, { chartType: "bar" });
-      expect(spec.horizontal).toBe(true); // string x, >8 categories -> horizontal for label readability
+      expect(spec.horizontal).toBeUndefined();
+    });
+
+    // The reported bug: 12 month buckets in a declared-string column rendered sideways.
+    it("keeps a 12-row declared-string bar vertical", () => {
+      const rows = Array.from({ length: 12 }, (_, i) => ({
+        month: `2026-${String(i + 1).padStart(2, "0")}`,
+        revenue: 100 + i,
+      }));
+      const spec = resolve(
+        {
+          rows,
+          fields: [
+            { name: "month", role: "dimension", kind: "string" },
+            { name: "revenue", role: "measure", kind: "number" },
+          ],
+        },
+        { chartType: "bar" },
+      );
+      expect(spec.horizontal).toBeUndefined();
+      expect(spec.data.length).toBe(12); // no reordering or gap-filling either
+    });
+
+    it("honours an explicit horizontal: true on the same 12-row shape", () => {
+      const rows = Array.from({ length: 12 }, (_, i) => ({
+        month: `2026-${String(i + 1).padStart(2, "0")}`,
+        revenue: 100 + i,
+      }));
+      const data: ChartData = {
+        rows,
+        fields: [
+          { name: "month", role: "dimension", kind: "string" },
+          { name: "revenue", role: "measure", kind: "number" },
+        ],
+      };
+      expect(resolve(data, { chartType: "bar", horizontal: true }).horizontal).toBe(true);
+      expect(resolve(data, { chartType: "bar", horizontal: false }).horizontal).toBe(false);
     });
 
     it("never renders a same-axis combo horizontal (even when asked)", () => {

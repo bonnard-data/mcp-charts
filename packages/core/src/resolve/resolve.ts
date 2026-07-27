@@ -17,7 +17,6 @@ import { detectChartType } from "./detect.js";
 import { pivotData } from "./pivot.js";
 import { fillMissingTimeIntervals } from "./fill-time.js";
 
-const HORIZONTAL_CATEGORY_THRESHOLD = 8;
 const MAX_PIE_SLICES = 8; // rank cap: slices beyond this fold into "Other"
 const MIN_PIE_FRACTION = 0.02; // share cap: slices under 2% of the total fold into "Other"
 const MAX_BARS = 30; // categorical bars beyond this: keep the top N by value, drop the tail
@@ -377,21 +376,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     ...(xField?.kind === "number" && { numeric: true }),
   };
 
-  // Orientation follows the x TYPE, not a raw count. Only CATEGORICAL bars flip horizontal (for
-  // readable labels when there are many). Time/numeric x stay vertical: time reads left->right and a
-  // numeric axis is linear — flipping them is wrong (and was the bug that sent month series sideways).
+  // Orientation is the caller's choice: bars default to vertical and only `opts.horizontal` flips them.
   const hasComboLine = series.some((s) => s.type === "line");
   let horizontal = opts.horizontal;
-  if (
-    horizontal == null &&
-    chartType === "bar" &&
-    xField?.kind === "string" &&
-    rows.length > HORIZONTAL_CATEGORY_THRESHOLD
-  ) {
-    horizontal = true;
-  }
   // A same-axis combo line is only meaningful over vertical bars (a connected line on a horizontal
-  // layout becomes a meaningless diagonal), so never render a combo horizontal — even if asked.
+  // layout becomes a meaningless diagonal), so never render a combo horizontal, even if asked.
   if (hasComboLine) horizontal = false;
 
   const columns = buildColumns(x, xField, series, byName, rows);

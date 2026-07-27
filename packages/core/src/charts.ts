@@ -37,7 +37,10 @@ function presentationInput(allow: ChartType[]): Record<string, z.ZodTypeAny> {
       ),
     title: z.string().optional().describe("Chart title"),
     stacking: z.enum(["stacked", "grouped", "stacked100"]).optional(),
-    horizontal: z.boolean().optional(),
+    horizontal: z
+      .boolean()
+      .optional()
+      .describe("Run bars horizontally, categories on the y-axis. Bars are vertical unless you set this."),
     reference: z
       .object({
         target: z.number().optional().describe("Draw a horizontal target/threshold line at this value"),
