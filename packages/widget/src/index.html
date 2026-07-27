@@ -203,17 +203,17 @@
         display: flex;
         flex-direction: column;
       }
-      html[data-embed][data-sizing="fill"] .solo.chart .cell-chart {
-        flex: 1;
-        min-height: 0;
-      }
-      /* Min-height guard: a consumer who forgets to size the frame still sees a chart. Scoped to the
-         single-cell shapes so a whole-dashboard embed keeps the grid's own 240px cells. */
+      /* Fill mode tracks the frame at every height. Any min-height floor here would make a frame
+         shorter than the floor overflow rather than shrink, clipping the x-axis tick labels; an
+         unsized iframe still has its 150px intrinsic height, so no floor is needed to stay visible. */
       html[data-embed][data-sizing="fill"] .solo.chart .cell-chart,
       html[data-embed][data-sizing="fill"] .solo .ec,
       html[data-embed][data-sizing="fill"] #root > .ec {
         height: 100%;
-        min-height: 240px;
+        min-height: 0;
+      }
+      html[data-embed][data-sizing="fill"] .solo.chart .cell-chart {
+        flex: 1;
       }
     </style>
   </head>
