@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.4",
-    "echarts": "^6.1.0"
+    "echarts": "^6.1.0",
+    "markdown-it": "^14.3.0"
   },
   "devDependencies": {
     "@bonnard/mcp-charts": "workspace:*",
+    "@types/markdown-it": "^14.1.2",
     "linkedom": "^0.18.0",
     "puppeteer-core": "^25.3.0",
     "typescript": "^5.6.0",

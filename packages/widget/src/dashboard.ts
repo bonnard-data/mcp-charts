@@ -2,7 +2,12 @@
 // with ECharts (or a table); KPI/text cells emit their final HTML here. Mirrors table.ts: hand-
 // rolled HTML, all strings escaped via `esc`. No DOM, so it is linkedom-testable and SSR-safe.
 import type { ChartSpec, DashboardItem, DashboardSpec, KpiTile, TextBlock } from "@bonnard/mcp-charts";
+import MarkdownIt from "markdown-it";
 import { fmt, esc } from "./format.js";
+
+// `html: false` is the XSS control: markdown-it never passes raw HTML tags from the source through,
+// only the tags it generates itself (strong/em/ul/...). `linkify: false` avoids auto-linking plain text.
+const md = new MarkdownIt({ html: false, linkify: false });
 
 // Mirror core's isDashboardSpec/isChartSpec. Kept local (not imported from core) so the widget's
 // dependency on @bonnard/mcp-charts stays type-only — a runtime import would invert the
@@ -52,7 +57,7 @@ export function renderKpi(t: KpiTile): string {
 
 export function renderTextBlock(t: TextBlock): string {
   const heading = t.heading ? `<h3>${esc(t.heading)}</h3>` : "";
-  return `${heading}<div class="text-body">${esc(t.text)}</div>`;
+  return `${heading}<div class="text-body">${md.render(t.text)}</div>`;
 }
 
 /** A chart's advisories as a muted `.cell-notes` block (blank chart, coerced columns, capped
