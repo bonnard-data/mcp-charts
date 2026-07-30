@@ -85,9 +85,8 @@ function itemBody(item: DashboardItem, index: number, notes: boolean): { kind: s
 function renderItem(item: DashboardItem, index: number, columns: number, notes = true): string {
   const span = cellSpan((item as { span?: number }).span, columns);
   const spanAttr = span > 1 ? ` data-span="${span}"` : "";
-  const newRowAttr = (item as { newRow?: boolean }).newRow ? ` data-new-row="true"` : "";
   const { kind, inner } = itemBody(item, index, notes);
-  return `<div class="cell ${kind}"${spanAttr}${newRowAttr}>${inner}</div>`;
+  return `<div class="cell ${kind}"${spanAttr}>${inner}</div>`;
 }
 
 /** Embed mode's single cell: the same item internals with no `.cell` wrapper, so the consumer's
