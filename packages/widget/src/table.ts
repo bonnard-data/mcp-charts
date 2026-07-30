@@ -21,5 +21,5 @@ export function renderTable(spec: ChartSpec): string {
         `<tr>${cols.map((c) => `<td>${esc(fmt(row[c.key], c.format, c.currency, c.fraction, false))}</td>`).join("")}</tr>`,
     )
     .join("");
-  return `<table class="tbl"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  return `<div class="tbl-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
