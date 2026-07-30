@@ -62,33 +62,6 @@ describe("renderDashboardShell — structure", () => {
     expect(d.querySelector(".cell")?.getAttribute("data-span")).toBe("2");
   });
 
-  it("newRow: a tile with newRow:true gets data-new-row; a plain tile keeps behaving as before", () => {
-    const d = doc(
-      renderDashboardShell({
-        columns: 2,
-        items: [
-          { type: "text", text: "top" },
-          { type: "text", text: "below", newRow: true },
-        ],
-      } as unknown as DashboardSpec),
-    );
-    const cells = d.querySelectorAll(".cell.text-block");
-    expect(cells[0].getAttribute("data-new-row")).toBeNull();
-    expect(cells[1].getAttribute("data-new-row")).toBe("true");
-  });
-
-  it("newRow composes with span: a spanned tile can also start a new row", () => {
-    const d = doc(
-      renderDashboardShell({
-        columns: 2,
-        items: [{ type: "text", text: "wide break", span: 2, newRow: true }],
-      } as unknown as DashboardSpec),
-    );
-    const cell = d.querySelector(".cell")!;
-    expect(cell.getAttribute("data-span")).toBe("2");
-    expect(cell.getAttribute("data-new-row")).toBe("true");
-  });
-
   it("unknown item type renders a muted unsupported cell, does not throw", () => {
     const weird = { items: [{ type: "sunburst" }] } as unknown as DashboardSpec;
     const d = doc(renderDashboardShell(weird));

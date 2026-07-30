@@ -171,8 +171,6 @@ export interface KpiTile {
   /** e.g. "vs last month". */
   caption?: string;
   span?: number;
-  /** Force this tile onto a fresh grid row instead of wrapping into leftover width. */
-  newRow?: boolean;
 }
 
 /** A block of plain text (escaped by the renderer; markdown is a later decision). */
@@ -183,8 +181,6 @@ export interface TextBlock {
   text: string;
   heading?: string;
   span?: number;
-  /** Force this tile onto a fresh grid row instead of wrapping into leftover width. */
-  newRow?: boolean;
 }
 
 /** A dashboard cell holding one resolved chart. Presence of `spec` is the discriminant. */
@@ -194,8 +190,6 @@ export interface ChartCell {
   id?: string;
   spec: ChartSpec;
   span?: number;
-  /** Force this tile onto a fresh grid row instead of wrapping into leftover width. */
-  newRow?: boolean;
 }
 
 export type DashboardItem = ChartCell | KpiTile | TextBlock;
