@@ -52,16 +52,32 @@
         width: 100%;
         height: 340px;
       }
+      /* Bound a table's growth in both axes so tall tables scroll instead of growing the card
+         unbounded, and wide tables scroll instead of clipping/overlapping at the cell edge. */
+      .tbl-scroll {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 320px;
+      }
       .tbl {
         width: 100%;
-        border-collapse: collapse;
+        /* `border-spacing: 0` not `border-collapse: collapse`: a sticky header over collapsed
+           borders drops its bottom border while scrolling (cross-browser quirk), so the row rule
+           lives on a cell box-shadow instead. */
+        border-spacing: 0;
         font-size: 13px;
       }
       .tbl th,
       .tbl td {
         text-align: left;
         padding: 6px 10px;
-        border-bottom: 1px solid var(--border);
+        box-shadow: inset 0 -1px 0 var(--border);
+      }
+      .tbl thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--bg);
       }
       .tbl th {
         color: var(--muted);
@@ -92,6 +108,10 @@
         display: grid;
         grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
         gap: 12px;
+        /* Without this the default `stretch` pulls a short cell (a 3-row table, a KPI) to the height
+           of its tallest grid-row neighbour, leaving empty space under its content. Chart cells keep
+           their explicit `.cell .ec` height regardless. */
+        align-items: start;
       }
       .cell {
         min-width: 0;
