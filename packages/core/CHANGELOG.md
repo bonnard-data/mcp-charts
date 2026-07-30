@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- 7c8d8cd: Render markdown in text tiles. Bold, italic, lists, links, and headers in a text tile's body now render as formatted output instead of literal markdown syntax. Raw HTML in the source is never passed through, so this is safe for LLM-authored or end-user-typed content.
+- 70345d6: Add an optional `newRow` marker on a dashboard tile. Setting it forces that tile to start a fresh grid row instead of wrapping into leftover space in the current row, giving explicit control over row breaks instead of relying on emergent auto-flow.
+
+### Patch Changes
+
+- 5148a47: Fix table tiles overflowing their cell instead of scrolling. A table with more rows than fit now scrolls internally with a sticky header instead of growing the card unbounded; a table wider than its cell scrolls horizontally instead of clipping at the edge. Also stop short cells (a small table, a KPI) from being stretched to match a taller chart neighbor in the same grid row.
+
 ## 0.3.2
 
 ### Patch Changes

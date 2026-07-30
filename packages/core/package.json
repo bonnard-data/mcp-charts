@@ -1,6 +1,6 @@
 {
   "name": "@bonnard/mcp-charts",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Add beautiful, agent-ready charts to your MCP server in a few lines.",
   "type": "module",
   "license": "MIT",
