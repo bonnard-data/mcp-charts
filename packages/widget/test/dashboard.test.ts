@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { parseHTML } from "linkedom";
 import { dashboardFixtures } from "@bonnard/mcp-charts/fixtures";
 import type { DashboardSpec } from "@bonnard/mcp-charts";
-import { renderDashboardShell, renderKpi, renderChartNotes } from "../src/dashboard.js";
+import { renderDashboardShell, renderKpi, renderChartNotes, renderTextBlock } from "../src/dashboard.js";
 import { renderToSvg } from "../src/ssr.js";
 import type { ChartSpec } from "@bonnard/mcp-charts";
 
@@ -73,6 +73,31 @@ describe("renderDashboardShell — structure", () => {
     expect(html).not.toContain("<img");
     expect(html).not.toContain("<b>hi</b>");
     expect(html).toContain("&lt;img");
+  });
+
+  it("text block renders markdown: **bold** becomes <strong>, heading stays plain-escaped", () => {
+    const html = renderTextBlock({ type: "text", heading: "Q2 <b>Overview</b>", text: "Test test **Bold**" });
+    const d = doc(html);
+    // Body markdown: **bold** -> <strong>, and no literal asterisks survive.
+    expect(d.querySelector(".text-body strong")?.textContent).toBe("Bold");
+    expect(d.querySelector(".text-body")?.textContent).not.toContain("**");
+    // Heading is a plain title field: escaped, never markdown/HTML.
+    const h3 = d.querySelector("h3")!;
+    expect(h3.textContent).toBe("Q2 <b>Overview</b>");
+    expect(h3.querySelector("b")).toBeNull();
+  });
+
+  it("text block does not pass source HTML through (html: false): an <img onerror> does not survive as a live element", () => {
+    const html = renderTextBlock({ type: "text", text: 'hi <img src=x onerror="alert(1)"> bye' });
+    // markdown-it with html:false escapes raw HTML in the source to literal text: the `<`/`>`/`"`
+    // become entities, so no live <img> tag and no parseable onerror attribute survive.
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img");
+    expect(html).not.toContain('onerror="alert');
+    const d = doc(html);
+    expect(d.querySelector(".text-body img")).toBeNull();
+    // The whole payload is inert escaped text inside the paragraph.
+    expect(d.querySelector(".text-body")?.textContent).toContain('<img src=x onerror="alert(1)">');
   });
 
   // A chart cell whose spec carries a note renders a `.cell-notes` sibling next to the mount point,

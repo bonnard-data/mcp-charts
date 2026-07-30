@@ -154,6 +154,44 @@
         font-size: 13px;
         margin: 0 0 4px;
       }
+      /* Markdown emitted into .text-body by markdown-it (html: false, so only these generated tags). */
+      .text-block .text-body > :first-child {
+        margin-top: 0;
+      }
+      .text-block .text-body > :last-child {
+        margin-bottom: 0;
+      }
+      .text-block .text-body p {
+        margin: 0 0 8px;
+      }
+      .text-block .text-body strong {
+        font-weight: 600;
+      }
+      .text-block .text-body em {
+        font-style: italic;
+      }
+      .text-block .text-body ul,
+      .text-block .text-body ol {
+        margin: 0 0 8px;
+        padding-left: 20px;
+      }
+      .text-block .text-body li {
+        margin: 2px 0;
+      }
+      .text-block .text-body a {
+        color: inherit;
+        text-decoration: underline;
+      }
+      .text-block .text-body h1,
+      .text-block .text-body h2,
+      .text-block .text-body h3,
+      .text-block .text-body h4,
+      .text-block .text-body h5,
+      .text-block .text-body h6 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 8px 0 4px;
+      }
       .unsupported {
         color: var(--muted);
         font-size: 13px;
