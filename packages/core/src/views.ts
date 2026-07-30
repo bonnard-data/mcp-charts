@@ -33,6 +33,8 @@ export interface ChartCellOptions extends ResolveOptions {
   id?: string;
   /** Grid columns this cell spans (renderer clamps to the dashboard's column count). */
   span?: number;
+  /** Force this cell onto a fresh grid row instead of wrapping into leftover width. */
+  newRow?: boolean;
   /** Declare field typing when inference can't nail it (currency, numeric-string dimensions). */
   fields?: FieldMeta[];
   /** Map columns to x / y / series when the names aren't obvious. */
@@ -86,11 +88,12 @@ export function chart(source: Record<string, unknown>[] | ChartData, opts: Chart
  * width.
  */
 export function chartCell(source: Record<string, unknown>[] | ChartData, opts: ChartCellOptions): ChartCell {
-  const { id, span, ...chartOpts } = opts;
+  const { id, span, newRow, ...chartOpts } = opts;
   return {
     spec: chart(source, chartOpts),
     ...(id ? { id } : {}),
     ...(span ? { span } : {}),
+    ...(newRow ? { newRow } : {}),
   };
 }
 

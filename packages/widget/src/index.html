@@ -132,6 +132,11 @@
       .cell[data-span="4"] {
         grid-column: span 4;
       }
+      /* Force a fresh row: start at column 1, so the tile can't wrap into leftover width.
+         Placed after the span rules so it overrides only the start of their shorthand. */
+      .cell[data-new-row="true"] {
+        grid-column-start: 1;
+      }
       /* Responsive 1-col fallback (iframe viewport width): collapse and neutralize spans. */
       @media (max-width: 560px) {
         .grid {
