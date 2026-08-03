@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // The consumer-facing preview CLI (`mcp-charts`). A separate build entry from the library:
 // importing @bonnard/mcp-charts never loads this. Runtime deps are Node built-ins only.
-// Design + full surface: docs/PREVIEW-CLI.md.
 import { existsSync, readFileSync, watch } from "node:fs";
 import { spawn } from "node:child_process";
 import { basename, dirname, resolve as resolvePath } from "node:path";

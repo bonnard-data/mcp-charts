@@ -2,8 +2,8 @@
 # Boot the example dashboard MCP server (if down) + launch MCP Inspector pointed at it, so a dev
 # can call explore_views / render_view interactively over Streamable HTTP.
 #
-# Uses an ALTERNATE port by default so it never collides with the long-running dev-tunnel server on
-# :3000. Inspector proxy/client ports are overridable for the same reason.
+# Uses an ALTERNATE port by default so it never collides with an example server already running on
+# :3020. Inspector proxy/client ports are overridable for the same reason.
 #
 # Usage:
 #   scripts/dev-inspect.sh                                  # server on :3011, inspector default ports
