@@ -52,3 +52,21 @@ jobs:
           git commit -m "chore: version packages"
           pnpm release
           git push --follow-tags origin main
+
+      # Mirror the new version's changelog section onto the pushed tag as a GitHub Release. Runs
+      # after the publish, so a failure here leaves npm and the tags intact.
+      - name: Publish the GitHub Release
+        if: steps.cs.outputs.pending == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          tag="@bonnard/mcp-charts@$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; nothing to do."
+            exit 0
+          fi
+          # The topmost "## <version>" section of the changelog, minus its heading.
+          awk '/^## /{n++} n==1' packages/core/CHANGELOG.md | tail -n +2 > /tmp/notes.md
+          printf '\n---\n\n[`%s` on npm](https://www.npmjs.com/package/@bonnard/mcp-charts/v/%s)\n' "$tag" "$version" >> /tmp/notes.md
+          gh release create "$tag" --verify-tag --title "v$version" --notes-file /tmp/notes.md --latest
