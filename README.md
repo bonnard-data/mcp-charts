@@ -218,6 +218,7 @@ See the [connecting-a-database guide](https://docs.bonnard.dev/mcp-charts/connec
 
 - Website: https://bonnard.dev
 - Docs: https://docs.bonnard.dev/mcp-charts/getting-started
+- Changelog: https://github.com/bonnard-data/mcp-charts/blob/main/packages/core/CHANGELOG.md
 - Issues: https://github.com/bonnard-data/mcp-charts/issues
 - Contact: [alex@bonnard.ai](mailto:alex@bonnard.ai)
 
