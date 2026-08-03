@@ -14,27 +14,22 @@ can grab the wrong copy, so make a MANUAL worktree of THIS repo if isolating.
   `packages/core/src/generated/widget-html.ts`. **Edit widget -> `pnpm build` re-embeds it into core.**
 - `examples/{dashboard,quickstart}` — runnable MCP servers (stateless Streamable HTTP at `/mcp`).
 - `packages/create-mcp-charts` — the `npm create @bonnard/mcp-charts` scaffold generator (private).
-- Docs: `docs/DEV-{LOOP,TUNNEL,HARNESS}.md`.
+- Docs: `docs/DEV-HARNESS.md`.
 
 ## Build / test
 - `pnpm build` — widget (single-file) then core (embeds widget). `pnpm typecheck`, `pnpm test`
   (199 core + 59 widget), `pnpm lint`, `pnpm check` (format + lint + typecheck).
 
-## Dev loop (pick by what you're editing — full detail in docs/DEV-LOOP.md)
+## Dev loop (pick by what you're editing)
 - **Widget renderer / core inference** -> `pnpm dev:harness` — HMR preview: the real widget in an
   iframe, fed specs from core `resolve()` (source), no build/embed/restart. (docs/DEV-HARNESS.md)
-- **Example server / views, or a real-host demo** -> `scripts/dev-tunnel.sh` — boots the example
-  server in watch mode + a STABLE ngrok static URL so Claude Desktop reconnects. Port **3020**.
-  (docs/DEV-TUNNEL.md)
 - **Driving the MCP tools** -> `pnpm dev:inspect` — MCP Inspector against the example server (port 3011).
 - **Before a release** -> `pnpm uat` — render-pipeline gate: renders every view + all fixtures
   through SSR, fails on blank charts. Port 3021.
 - **Fresh consumer project** -> `npm create @bonnard/mcp-charts my-server` (local:
   `node packages/create-mcp-charts/bin/index.mjs <dir>`).
 
-Ports are chosen to avoid collisions: tunnel **3020**, uat **3021**, inspect **3011**, and the
-mcp-platform backend owns **3000**. ngrok auth is the "bon" account authtoken in treekey
-(`ngrok/BON_AUTHTOKEN`); never print it (see docs/DEV-TUNNEL.md for the config-precedence gotcha).
+Ports are chosen to avoid collisions: uat **3021**, inspect **3011**.
 
 ## Release (publish to npm)
 Changesets-driven auto-publish, in GitHub Actions (`release.yml`) on push to `main`.
