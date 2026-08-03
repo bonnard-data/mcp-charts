@@ -173,7 +173,7 @@ export interface KpiTile {
   span?: number;
 }
 
-/** A block of plain text (escaped by the renderer; markdown is a later decision). */
+/** A block of markdown text. The renderer parses it with raw HTML disabled; `heading` is escaped. */
 export interface TextBlock {
   type: "text";
   /** Stable id for uniform addressability. v1 render_view item selection renders chart cells only. */
