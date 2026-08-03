@@ -1,6 +1,5 @@
-// Track A rendering-coverage: assert the high-cardinality caps as structural invariants, so a
-// regression that removes a cap (and re-introduces an unreadable chart) fails in CI. These mirror
-// the DOM-confirmed thresholds documented in docs/rendering-coverage.md.
+// Assert the high-cardinality caps as structural invariants, so a regression that removes a cap
+// (and re-introduces an unreadable chart) fails in CI. These mirror DOM-confirmed thresholds.
 import { describe, it, expect } from "vitest";
 import { chart } from "../src/views.js";
 

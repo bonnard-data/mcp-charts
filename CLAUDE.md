@@ -14,7 +14,7 @@ can grab the wrong copy, so make a MANUAL worktree of THIS repo if isolating.
   `packages/core/src/generated/widget-html.ts`. **Edit widget -> `pnpm build` re-embeds it into core.**
 - `examples/{dashboard,quickstart}` — runnable MCP servers (stateless Streamable HTTP at `/mcp`).
 - `packages/create-mcp-charts` — the `npm create @bonnard/mcp-charts` scaffold generator (private).
-- Docs: `docs/DEV-{LOOP,TUNNEL,HARNESS}.md`, `docs/INTERACTIVITY-CALLBACK-DEEPDIVE.md`.
+- Docs: `docs/DEV-{LOOP,TUNNEL,HARNESS}.md`.
 
 ## Build / test
 - `pnpm build` — widget (single-file) then core (embeds widget). `pnpm typecheck`, `pnpm test`

@@ -1,8 +1,8 @@
-// Authoring-error / feedback map (Track B). A deliberately-wrong or ambiguous authoring input per
-// case, asserted against the CURRENT behavior of the library so the feedback map is runnable and any
+// Authoring-error / feedback map. A deliberately-wrong or ambiguous authoring input per case,
+// asserted against the CURRENT behavior of the library so the feedback map is runnable and any
 // future change to it is visible in a diff. This DOCUMENTS reality; it is not a wishlist.
 //
-// Categories (mirrors docs/authoring-error-map.md):
+// Categories:
 //   TS-error         -> tsc rejects the snippet at author time (see the `// @ts-expect-error` cases)
 //   runtime-error    -> resolve/chart throws, or render_view returns isError
 //   note-on-spec     -> renders, but spec.notes carries a relevant warning the dev/agent can see
