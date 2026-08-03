@@ -53,3 +53,11 @@ marketing, UI copy): run the `house-voice` skill (house copy rules + removes AI 
 accuracy first). Commit trailer:
 `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Sole-dev workflow: short-lived
 branch -> review -> merge to `main` locally; no PRs.
+
+**This repo is public.** `docs/` ships with the repo and is genuine consumer documentation only.
+Internal-only prose (research notes, design/decision docs, competitor analysis, QA tracking, runbooks
+naming real infrastructure like tunnel domains or secret reference names) goes in the gitignored
+`internal/` folder, never in `docs/`. Before adding a file to `docs/`, ask: would this get pasted into
+the README? Commit messages are public and permanent too, and a path-based history rewrite never
+touches them — never name a tunnel domain, a secret reference, a prospect, or a private sibling repo
+in a commit message here.

@@ -9,10 +9,8 @@ coverage
 __visuals__
 gallery.html
 
-# internal dev backlog — not for the public package repo
-NOTES.md
-
-.tracka-shots/
-.tracka-cases.json
-scripts/tracka-cases.mjs
-tracka-shots-tmp/
+# internal/ never ships: research, plans, QA tracking, and runbooks that name
+# real infrastructure (tunnel domains, secret refs, prospects). docs/ is
+# PUBLIC and ships with the repo — litmus test before adding a file to docs/:
+# would you paste it into the README?
+internal/
