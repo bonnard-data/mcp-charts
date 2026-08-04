@@ -3,8 +3,9 @@
 // framework, no network. Copies template/ into a target dir, substitutes the project name, and
 // unhides the dotfiles npm would otherwise strip from the published tarball.
 //
-//   npm create @bonnard/mcp-charts my-charts-server
-//   npm create @bonnard/mcp-charts            # prompts for a directory
+// Not published to npm — run it directly:
+//   node packages/create-mcp-charts/bin/index.mjs my-charts-server
+//   node packages/create-mcp-charts/bin/index.mjs            # prompts for a directory
 import { cp, readFile, writeFile, rename, readdir, access } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";

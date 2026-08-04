@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Scaffold a minimal MCP server with agent-ready charts (@bonnard/mcp-charts). Run `npm create @bonnard/mcp-charts`.",
+  "description": "Scaffold a minimal MCP server with agent-ready charts (@bonnard/mcp-charts). Not published; run locally: `node packages/create-mcp-charts/bin/index.mjs`.",
   "license": "MIT",
   "bin": {
     "create-mcp-charts": "bin/index.mjs"
