@@ -558,6 +558,67 @@ describe("resolve() — high-cardinality guardrails", () => {
     expect(spec.data.length).toBe(3);
   });
 
+  describe("xAxisType override", () => {
+    const yearly: ChartData = {
+      rows: [
+        { year: 2017, orders: 120 },
+        { year: 2018, orders: 180 },
+        { year: 2026, orders: 240 },
+      ],
+      fields: [
+        { name: "year", role: "dimension", kind: "number" },
+        { name: "orders", role: "measure", kind: "number" },
+      ],
+    };
+
+    it('"categorical" suppresses the numeric axis on a numeric column', () => {
+      const spec = resolve(yearly, { chartType: "line", xAxisType: "categorical" });
+      expect(spec.x).toBe("year");
+      expect(spec.xAxis?.numeric).toBeUndefined();
+      expect(spec.xAxis?.label).toBe("Year");
+    });
+
+    it('"continuous" forces the numeric axis on a low-cardinality numeric column', () => {
+      const spec = resolve(yearly, { chartType: "line", xAxisType: "continuous" });
+      expect(spec.xAxis?.numeric).toBe(true);
+    });
+
+    it('"continuous" forces the numeric axis on a string column', () => {
+      const spec = resolve(
+        {
+          rows: [
+            { bucket: "10", v: 1 },
+            { bucket: "20", v: 2 },
+          ],
+          fields: [
+            { name: "bucket", role: "dimension", kind: "string" },
+            { name: "v", role: "measure", kind: "number" },
+          ],
+        },
+        { chartType: "line", xAxisType: "continuous" },
+      );
+      expect(spec.xAxis?.numeric).toBe(true);
+    });
+
+    it("no override keeps the inferred behavior on both a numeric and a string x", () => {
+      expect(resolve(yearly, { chartType: "line" }).xAxis?.numeric).toBe(true);
+      const strings = resolve(
+        {
+          rows: [
+            { region: "EU", revenue: 10 },
+            { region: "US", revenue: 20 },
+          ],
+          fields: [
+            { name: "region", role: "dimension", kind: "string" },
+            { name: "revenue", role: "measure", kind: "number" },
+          ],
+        },
+        { chartType: "bar" },
+      );
+      expect(strings.xAxis?.numeric).toBeUndefined();
+    });
+  });
+
   it("stride-downsamples a >2000-point line, keeping the last point", () => {
     const rows = Array.from({ length: 5000 }, (_, i) => ({
       day: new Date(Date.UTC(2020, 0, 1 + i)).toISOString().slice(0, 10),

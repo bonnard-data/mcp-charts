@@ -146,6 +146,36 @@ describe("specToOption — numeric linear x", () => {
       [100, 20],
     ]);
   });
+
+  it("scales the numeric x to the data range instead of anchoring it at zero", () => {
+    const o = specToOption({
+      chartType: "line" as const,
+      x: "year",
+      xAxis: { numeric: true },
+      data: [
+        { year: 2017, orders: 120 },
+        { year: 2026, orders: 240 },
+      ],
+      series: [{ key: "orders", label: "Orders" }],
+      legend: false,
+    }) as any;
+    expect(o.xAxis.scale).toBe(true);
+  });
+
+  it("a categorical x (no numeric flag) stays a category axis", () => {
+    const o = specToOption({
+      chartType: "line" as const,
+      x: "year",
+      data: [
+        { year: 2017, orders: 120 },
+        { year: 2026, orders: 240 },
+      ],
+      series: [{ key: "orders", label: "Orders" }],
+      legend: false,
+    }) as any;
+    expect(o.xAxis.type).toBe("category");
+    expect(o.xAxis.data).toEqual(["2017", "2026"]);
+  });
 });
 
 describe("specToOption — dual-axis", () => {
@@ -339,6 +369,12 @@ describe("specToOption — grouped scatter", () => {
     expect(o.series.map((s: any) => s.type)).toEqual(["scatter", "scatter"]);
     expect(o.series.map((s: any) => s.name).sort()).toEqual(["Enterprise", "SMB"]);
     expect(o.legend).toBeDefined();
+  });
+
+  it("scales the scatter x to the data range instead of anchoring it at zero", () => {
+    const o: any = specToOption(spec);
+    expect(o.xAxis.type).toBe("value");
+    expect(o.xAxis.scale).toBe(true);
   });
 
   it("packs only a group's own points into its series (sparse y skipped)", () => {

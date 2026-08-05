@@ -135,6 +135,10 @@ export interface ResolveOptions {
   horizontal?: boolean;
   /** Add reference lines: an average (computed) and/or a target (a value you pass). */
   reference?: { target?: number; average?: boolean };
+  /** Force how a numeric x-axis is scaled, overriding inference. "categorical" plots the values as
+   *  evenly-spaced labels (a GROUP BY year reads as buckets, not a timeline); "continuous" keeps the
+   *  linear scale. Unset infers from the column's kind. */
+  xAxisType?: "continuous" | "categorical";
   /** Promote encoding-failure advisories (zero series, ignored encode column) from notes to
    *  thrown errors. For authoring/CI: `explain(rows, { chartType, strict: true })` fails loudly
    *  on a bad encoding instead of returning a blank chart. Default false (production posture). */
