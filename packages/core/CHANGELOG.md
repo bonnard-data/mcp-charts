@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- bb774eb: New `xAxisType` option on `resolve()` forces a numeric x-axis to be read as `"categorical"` or `"continuous"`, overriding inference. A `GROUP BY year` produces a numeric column that is really a set of buckets, and charting it on a linear scale spreads three years across a decade of empty axis; `xAxisType: "categorical"` plots them as evenly-spaced labels instead. Unset, inference is unchanged.
+
+  A genuinely continuous numeric x-axis (line and scatter) now fits its own data range rather than being forced through zero, so a range like 2017-2026 no longer collapses into a sliver at the end of a 0-2500 axis.
+
+### Patch Changes
+
+- 725227d: When a chart result has two or more numeric columns and no explicit `encode.x`, `resolve()` used to guess the x-axis by picking the column with the _fewest_ distinct values. That inverts on the common `SELECT <group_col>, COUNT(*)/SUM(...) ... GROUP BY <group_col>` shape whenever two aggregate values coincidentally tie, ranking the measure above its own grouping column and producing a fabricated axis. It now promotes the first non-constant column instead, matching the column order a `GROUP BY` query already returns.
+- c97c416: KPI tiles size their value against the cell, so a long figure (a currency prefix plus a full-digit amount) shrinks and, at worst, wraps instead of spilling past the cell edge in a narrow multi-column dashboard.
+- fa671e0: `presentationInput`'s `encode` parameter (used by the `visualize` MCP tool and by any caller building a chart spec) had a description that didn't say when it actually matters: "Map columns to x / y / series / y2 when names aren't obvious" — framed as a naming-ambiguity fallback, when the real trigger is column _type_, not naming. It's rewritten to explain the actual failure mode (an all-numeric result where the aggregate is listed before its grouping column) and give a concrete example, so a calling agent has a chance of setting `encode.x` correctly without needing to already know how the auto-detection heuristic works.
+
 All notable changes to `@bonnard/mcp-charts` are documented here.
 
 ## 0.4.1
