@@ -183,6 +183,9 @@
         font-size: 13px;
         line-height: 1.5;
       }
+      .text-block .text-body {
+        overflow-wrap: anywhere;
+      }
       .text-block h3 {
         font-size: 13px;
         margin: 0 0 4px;
@@ -233,11 +236,13 @@
         color: var(--muted);
         font-size: 12px;
         margin-top: 10px;
+        overflow-wrap: anywhere;
       }
       .cell-notes {
         color: var(--muted);
         font-size: 11px;
         margin-top: 8px;
+        overflow-wrap: anywhere;
       }
       /* Embed mode (`#embed`): the consumer owns spacing, chrome, and height. Everything below is
          inert without the `data-embed` root attribute set by embed.ts. */

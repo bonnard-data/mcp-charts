@@ -11,13 +11,21 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["test/**/*.test.ts"],
-          exclude: ["test/embed-browser.test.ts"],
+          exclude: [
+            "test/embed-browser.test.ts",
+            "test/kpi-overflow-browser.test.ts",
+            "test/dashboard-overflow-browser.test.ts",
+          ],
         },
       },
       {
         test: {
           name: "browser",
-          include: ["test/embed-browser.test.ts"],
+          include: [
+            "test/embed-browser.test.ts",
+            "test/kpi-overflow-browser.test.ts",
+            "test/dashboard-overflow-browser.test.ts",
+          ],
           testTimeout: 30_000,
           hookTimeout: 60_000,
           // One browser page drives every case in order; parallel files would fight over it.

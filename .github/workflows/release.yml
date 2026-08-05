@@ -31,10 +31,21 @@ jobs:
       - name: Detect pending changesets
         id: cs
         run: |
-          if [ -n "$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null)" ]; then
+          files="$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null)"
+          if [ -n "$files" ]; then
             echo "pending=true" >> "$GITHUB_OUTPUT"
+            # A changeset body containing `<!-- skip-gh-release -->` opts a quiet patch (a bug fix
+            # with nothing worth announcing) out of the GitHub Release notification, without
+            # affecting the npm publish itself. Skip the release only when EVERY pending changeset
+            # opts out — a mix with a real feature/fix changeset still gets announced.
+            skip=true
+            for f in $files; do
+              grep -q '<!-- skip-gh-release -->' "$f" || skip=false
+            done
+            echo "skip_release=$skip" >> "$GITHUB_OUTPUT"
           else
             echo "pending=false" >> "$GITHUB_OUTPUT"
+            echo "skip_release=false" >> "$GITHUB_OUTPUT"
           fi
 
       # Aggregate the changesets into one bump + changelog, publish to npm, then push the version
@@ -54,9 +65,10 @@ jobs:
           git push --follow-tags origin main
 
       # Mirror the new version's changelog section onto the pushed tag as a GitHub Release. Runs
-      # after the publish, so a failure here leaves npm and the tags intact.
+      # after the publish, so a failure here leaves npm and the tags intact. Skipped for a
+      # quiet patch (see the skip_release detection above) — npm still gets the version.
       - name: Publish the GitHub Release
-        if: steps.cs.outputs.pending == 'true'
+        if: steps.cs.outputs.pending == 'true' && steps.cs.outputs.skip_release != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
