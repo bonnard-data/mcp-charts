@@ -71,9 +71,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   const isScatter = opts.chartType === "scatter";
 
   // Numeric grouping column: when EVERY column is numeric (no time/string dimension to be an
-  // x-axis), the lowest-cardinality numeric acts as the x dimension (e.g. {year, revenue} ->
-  // a bar over year) instead of degrading to a two-measure table. Tie on cardinality -> the
-  // earliest column (SQL convention puts the GROUP BY key first). Not for scatter (both stay measures).
+  // x-axis), the EARLIEST varying column acts as the x dimension (e.g. {year, revenue} -> a bar
+  // over year) instead of degrading to a two-measure table. Column order mirrors the SELECT
+  // clause, and SQL convention puts the GROUP BY key first; cardinality comparison is a trap
+  // (a COUNT(*) with coincidentally-equal values can rank below its own grouping key). A
+  // constant column can't be an axis, so skip past those. Not for scatter (both stay measures).
   if (
     !isScatter &&
     !encode.x &&
@@ -82,8 +84,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     fields.every((f) => f.role === "measure")
   ) {
     const distinct = (k: string) => new Set(data.rows.map((r) => r[k])).size;
-    let best = fields[0]!;
-    for (const f of fields) if (distinct(f.name) < distinct(best.name)) best = f;
+    const best = fields.find((f) => distinct(f.name) > 1) ?? fields[0]!;
     best.role = "dimension";
   }
 
