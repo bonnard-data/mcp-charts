@@ -731,8 +731,9 @@ describe("resolve() — P0.2 numeric grouping column", () => {
     expect(spec.data.length).toBe(3);
   });
 
-  it("picks the lower-cardinality numeric as x when distinct counts differ", () => {
-    // age has 2 distinct, score has 4 -> age is the grouping dimension.
+  it("picks the first column as x even when a later column has fewer distinct values", () => {
+    // age (first, 2 distinct) is the grouping key of unaggregated data; score (4 distinct)
+    // is the measure. Column order decides, not cardinality.
     const data: ChartData = {
       rows: [
         { age: 30, score: 11 },
@@ -745,6 +746,34 @@ describe("resolve() — P0.2 numeric grouping column", () => {
     expect(spec.x).toBe("age");
     // age 30 -> 11+22=33, age 40 -> 33+44=77 (also exercises duplicate-x aggregation)
     expect(spec.data.find((r) => r.age === 30)?.score).toBe(33);
+  });
+
+  it("keeps the grouping column as x when the count column coincidentally ties (the YEAR/COUNT incident)", () => {
+    // EXTRACT(YEAR ...) AS year, COUNT(*) AS n GROUP BY year: two years share n=5, so n has
+    // FEWER distinct values than year. Cardinality-based choice picked n as the axis and
+    // fabricated a chart; column order picks year.
+    const data: ChartData = {
+      rows: [
+        { year: 2023, n: 5 },
+        { year: 2024, n: 7 },
+        { year: 2025, n: 5 },
+      ],
+    };
+    const spec = resolve(data);
+    expect(spec.x).toBe("year");
+    expect(spec.series.map((s) => s.key)).toEqual(["n"]);
+  });
+
+  it("skips a constant first column when promoting a numeric x (it cannot be an axis)", () => {
+    const data: ChartData = {
+      rows: [
+        { report_year: 2026, month: 1, revenue: 10 },
+        { report_year: 2026, month: 2, revenue: 20 },
+        { report_year: 2026, month: 3, revenue: 30 },
+      ],
+    };
+    const spec = resolve(data);
+    expect(spec.x).toBe("month");
   });
 
   it("a single all-numeric row stays a table (KPI), not a promoted x", () => {
