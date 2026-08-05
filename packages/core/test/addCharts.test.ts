@@ -37,8 +37,34 @@ describe("addCharts (SQL mode)", () => {
     const viz = tools.find((t) => t.name === "visualize");
     expect(viz).toBeDefined();
     const props = (viz!.inputSchema as any).properties;
-    expect(Object.keys(props)).toEqual(expect.arrayContaining(["sql", "chartType", "encode", "title"]));
+    expect(Object.keys(props)).toEqual(expect.arrayContaining(["sql", "chartType", "encode", "title", "xAxisType"]));
     expect(viz!.description).toMatch(/explore_schema/); // discovery hint surfaced
+  });
+
+  it("forwards xAxisType to resolve(), so a grouped-by year plots as categories", async () => {
+    const yearlyRunSql = async (): Promise<ChartData> => ({
+      rows: [
+        { year: 2017, orders: 120 },
+        { year: 2026, orders: 240 },
+      ],
+      fields: [
+        { name: "year", role: "dimension", kind: "number" },
+        { name: "orders", role: "measure", kind: "number" },
+      ],
+    });
+    const client = await connect((s) => addCharts(s, { runSql: yearlyRunSql }));
+    const sql = "SELECT year, COUNT(*) orders FROM orders GROUP BY 1";
+    const call = async (xAxisType?: string) =>
+      (
+        (await client.callTool({
+          name: "visualize",
+          arguments: { sql, chartType: "line", ...(xAxisType && { xAxisType }) },
+        })) as any
+      ).structuredContent;
+
+    expect((await call("categorical")).xAxis.numeric).toBeUndefined();
+    expect((await call("continuous")).xAxis.numeric).toBe(true);
+    expect((await call()).xAxis.numeric).toBe(true); // unset keeps the inferred behavior
   });
 
   it("calling visualize returns a ChartSpec in structuredContent", async () => {

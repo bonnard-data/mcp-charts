@@ -2,7 +2,7 @@
 // callback, run resolve() server-side, and return a ChartSpec linked to the ui:// widget.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ChartContext, ChartData, ChartSpec, ChartType, Encode } from "./types.js";
+import type { ChartContext, ChartData, ChartSpec, ChartType, Encode, ResolveOptions } from "./types.js";
 import { resolve } from "./resolve/resolve.js";
 import { validateRowsShape, assertPlottedScalar, warnUntypedColumns } from "./validate.js";
 import { WIDGET_HTML } from "./generated/widget-html.js";
@@ -41,6 +41,15 @@ function presentationInput(allow: ChartType[]): Record<string, z.ZodTypeAny> {
       .boolean()
       .optional()
       .describe("Run bars horizontally, categories on the y-axis. Bars are vertical unless you set this."),
+    xAxisType: z
+      .enum(["continuous", "categorical"])
+      .optional()
+      .describe(
+        "How to scale a numeric x-axis. Omit to infer from the column. Set 'categorical' when a " +
+          "numeric column is really a dimension you grouped by (a year, a rating, a bucket) so the " +
+          "values plot as evenly-spaced labels; set 'continuous' when the axis is a measured " +
+          "quantity and the gaps between values carry meaning.",
+      ),
     reference: z
       .object({
         target: z.number().optional().describe("Draw a horizontal target/threshold line at this value"),
@@ -218,6 +227,7 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
           stacking: args.stacking as ChartSpec["stacking"],
           horizontal: args.horizontal as boolean | undefined,
           reference: args.reference as { target?: number; average?: boolean } | undefined,
+          xAxisType: args.xAxisType as ResolveOptions["xAxisType"],
         });
         assertPlottedScalar(spec); // every plotted column must be scalar
         return buildResult(spec);

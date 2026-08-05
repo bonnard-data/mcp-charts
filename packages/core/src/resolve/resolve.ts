@@ -373,7 +373,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     ...(xField?.granularity && { granularity: xField.granularity }),
     // Numeric (non-time) x: signal the renderer to use a linear scale on line/area, so points
     // sit at their true positions (irregular gaps show) instead of evenly-spaced categories.
-    ...(xField?.kind === "number" && { numeric: true }),
+    ...(opts.xAxisType === "categorical"
+      ? {}
+      : opts.xAxisType === "continuous"
+        ? { numeric: true }
+        : xField?.kind === "number" && { numeric: true }),
   };
 
   // Orientation is the caller's choice: bars default to vertical and only `opts.horizontal` flips them.

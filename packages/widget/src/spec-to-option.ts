@@ -111,6 +111,9 @@ function scatterOption(spec: ChartSpec): ECOption {
       axisLabel: { formatter: (v: number) => xAxisFmt(v) },
       axisLine: { onZero: false },
       splitLine: { show: true },
+      // Fit the axis to the data's range. Without this ECharts anchors it at zero, so a tight
+      // band of large values (years, prices) collapses into a sliver at the far end.
+      scale: true,
     },
     yAxis: {
       type: "value",
@@ -235,6 +238,9 @@ function cartesianOption(spec: ChartSpec, kind: "bar" | "line", area: boolean): 
     type: "value",
     axisLabel: { formatter: (v: number) => fmt(v, spec.xAxis?.format) },
     axisLine: { onZero: false },
+    // Fit the axis to the data's range. Without this ECharts anchors it at zero, so a tight
+    // band of large values (years, prices) collapses into a sliver at the far end.
+    scale: true,
   };
   const yAxis = horizontal ? { ...catAxis, inverse: true } : dual ? [leftAxis, rightAxis] : leftAxis;
 
