@@ -25,7 +25,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
       # Auto-publish on push (the org disallows Actions-created PRs, so no "Version Packages" PR).
       - name: Detect pending changesets
