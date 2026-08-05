@@ -78,7 +78,15 @@ function presentationInput(allow: ChartType[]): Record<string, z.ZodTypeAny> {
           .describe("Scatter only: a 3rd numeric column mapped to point size (makes a bubble chart)"),
       })
       .optional()
-      .describe("Map columns to x / y / series / y2 when names aren't obvious"),
+      .describe(
+        "Map columns to x / y / series / y2 / line / size. Usually unnecessary: auto-detection " +
+          "prefers a text or date column for the axis, and falls back to the first non-constant " +
+          "column when every column is numeric — which is already the grouping column in a typical " +
+          "`SELECT <group_col>, COUNT(*)/SUM(...) ... GROUP BY <group_col>` result. Set `x` " +
+          "explicitly only when a query lists the aggregate BEFORE its grouping column (e.g. " +
+          "`SELECT COUNT(*) AS n, year FROM t GROUP BY year`), since auto-detection would otherwise " +
+          "pick the count as the axis.",
+      ),
   };
 }
 
