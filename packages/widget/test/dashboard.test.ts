@@ -1,6 +1,6 @@
-// Structural (linkedom) + SSR-snapshot tests for the dashboard renderer. Matches house style
-// (no Playwright; real-pixel checks stay manual via examples/dashboard.html). Iterates the shared
+// Structural (linkedom) + SSR-snapshot tests for the dashboard renderer. Iterates the shared
 // fixtures so the widget and the platform's compose provably agree on the same specs.
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { parseHTML } from "linkedom";
 import { dashboardFixtures } from "@bonnard/mcp-charts/fixtures";
@@ -152,5 +152,18 @@ describe("renderToSvg — chart cell", () => {
     const cell = single.items[0];
     expect("spec" in cell).toBe(true);
     if ("spec" in cell) expect(renderToSvg(cell.spec)).toMatchSnapshot();
+  });
+});
+
+// The stylesheet ships in index.html, so the structural check reads it there. Whether a value
+// actually fits its cell is a layout question linkedom cannot answer: kpi-overflow-browser.test.ts
+// measures that in a real browser.
+describe("KPI tile stylesheet", () => {
+  const css = readFileSync(new URL("../src/index.html", import.meta.url), "utf8");
+
+  it("sizes the value against the cell, with a break as the backstop", () => {
+    expect(css).toMatch(/\.cell\.kpi,\s*html\[data-embed\] \.solo\.kpi \{\s*container-type: inline-size;/);
+    expect(css).toMatch(/\.kpi \.kpi-value \{[^}]*font-size: clamp\(14px, 12cqi, 26px\);/);
+    expect(css).toMatch(/\.kpi \.kpi-value \{[^}]*overflow-wrap: anywhere;/);
   });
 });

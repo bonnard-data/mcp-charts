@@ -141,17 +141,29 @@
           grid-column: auto !important;
         }
       }
+      /* A KPI tile sizes its value against the cell, not the viewport, so the same tile fits a
+         4-column grid and a full-width solo embed. */
+      .cell.kpi,
+      html[data-embed] .solo.kpi {
+        container-type: inline-size;
+      }
       .kpi .kpi-label {
         font-size: 12px;
         color: var(--muted);
+        overflow-wrap: anywhere;
       }
       .kpi .kpi-value {
-        font-size: 26px;
+        /* A full-digit currency amount ("GBP 1,648,745,000") is ~17 characters with one break
+           opportunity, so at a fixed 26px it spilled past a narrow cell. Scale with the cell and
+           break anywhere as a last resort: an oversized value shrinks, then wraps, never clips. */
+        font-size: clamp(14px, 12cqi, 26px);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
       }
       .kpi .kpi-delta {
-        font-size: 14px;
+        /* Relative to the value, so the delta shrinks with it instead of crowding the same line. */
+        font-size: 0.54em;
         font-weight: 600;
         margin-left: 8px;
       }
@@ -165,6 +177,7 @@
         font-size: 12px;
         color: var(--muted);
         margin-top: 2px;
+        overflow-wrap: anywhere;
       }
       .text-block {
         font-size: 13px;
