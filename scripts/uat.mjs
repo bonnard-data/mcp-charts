@@ -36,6 +36,27 @@ function assertHasMarks(chartType, svg, label) {
   }
 }
 
+/**
+ * The inverse gate, for a fixture that declares `expect.blank`: nothing to plot is the POINT (no
+ * measure column), so the mark assertion above would be the wrong question. Assert the structural
+ * cause instead — zero series — plus the decision that explains it, and that the render still
+ * produces the axis chrome rather than throwing. assertHasMarks cannot stand in: it counts the
+ * background rect and the axis path, so a genuinely empty plot passes it.
+ */
+function assertBlankByDesign(spec, fx, label) {
+  if (!isChartSpec(spec)) throw new Error(`${label}: expected a ChartSpec`);
+  if (spec.series.length > 0) {
+    throw new Error(`${label}: expected no series to plot, got ${spec.series.length}`);
+  }
+  const kinds = (spec.decisions ?? []).map((d) => d.kind);
+  for (const want of fx.demonstrates ?? []) {
+    if (!kinds.includes(want)) throw new Error(`${label}: expected a "${want}" decision, got [${kinds.join(", ")}]`);
+  }
+  const svg = renderToSvg(spec);
+  if (!svg || svg.trim().length === 0) throw new Error(`${label}: empty render output`);
+  return `blank by design: 0 series, decisions: ${kinds.join(", ")}`;
+}
+
 /** Render + assert one spec (ChartSpec directly, DashboardSpec per cell). Returns a short detail. */
 function renderAndAssert(spec, label) {
   if (isDashboardSpec(spec)) {
@@ -168,7 +189,12 @@ async function main() {
 
   // Fixtures: resolve() + SSR, so inference regressions fail the gate too.
   for (const fx of fixtures) {
-    record(`fixture:${fx.name}`, () => renderAndAssert(resolveSpec(fx.data, fx.opts), `fixture:${fx.name}`));
+    record(`fixture:${fx.name}`, () => {
+      const spec = resolveSpec(fx.data, fx.opts);
+      return fx.expect?.blank
+        ? assertBlankByDesign(spec, fx, `fixture:${fx.name}`)
+        : renderAndAssert(spec, `fixture:${fx.name}`);
+    });
   }
 
   // --- report ---

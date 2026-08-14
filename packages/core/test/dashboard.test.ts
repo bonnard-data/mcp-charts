@@ -44,7 +44,7 @@ describe("dashboard guards", () => {
 });
 
 describe("dashboard fixtures", () => {
-  it("has all six named fixtures", () => {
+  it("has every named fixture", () => {
     expect(dashboardFixtures.map((f) => f.name)).toEqual([
       "single-chart",
       "grid-2x2",
@@ -52,6 +52,8 @@ describe("dashboard fixtures", () => {
       "mixed",
       "narrow-stacked",
       "degenerate",
+      "decisions-audiences",
+      "decisions-errors",
     ]);
   });
 
