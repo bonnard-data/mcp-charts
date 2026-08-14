@@ -34,6 +34,10 @@ const AUDIENCES: Record<DecisionKind, DecisionAudience[]> = {
   consumer_note: ["viewer", "agent"],
 };
 
+/** Every kind, from the one map that has to list them all. A test walks this to prove each kind
+ *  still has a worked example, which a type-level union cannot do at runtime. */
+export const DECISION_KINDS = Object.keys(AUDIENCES) as DecisionKind[];
+
 export function audiencesFor(kind: DecisionKind): DecisionAudience[] {
   return [...AUDIENCES[kind]];
 }
