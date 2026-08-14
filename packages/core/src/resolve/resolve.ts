@@ -16,6 +16,7 @@ import { inferFields, looksLikeLooseDate } from "./infer.js";
 import { detectChartType } from "./detect.js";
 import { pivotData } from "./pivot.js";
 import { fillMissingTimeIntervals } from "./fill-time.js";
+import { DecisionLog, consumerDecisions, decisionMessage } from "./decisions.js";
 
 const MAX_PIE_SLICES = 8; // rank cap: slices beyond this fold into "Other"
 const MIN_PIE_FRACTION = 0.02; // share cap: slices under 2% of the total fold into "Other"
@@ -44,6 +45,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   const encode = data.encode ?? {};
   const fields = inferFields(data);
   const byName = new Map(fields.map((f) => [f.name, f]));
+  const log = new DecisionLog();
 
   // Transparency: never silently drop an encode mapping. Flag any encode column that isn't in the
   // result (a typo or stale name) so the agent can fix its next call; we still render what we can.
@@ -61,10 +63,12 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     ),
   ];
   if (unknownCols.length) {
-    const msg = `Ignored unknown encode column${unknownCols.length > 1 ? "s" : ""} ${unknownCols.map((c) => `"${c}"`).join(", ")}; available: ${fields.map((f) => f.name).join(", ")}.`;
-    if (opts.strict) throw new Error(msg);
-    data.notes = [msg, ...(data.notes ?? [])];
+    const payload = { columns: unknownCols, available: fields.map((f) => f.name) };
+    if (opts.strict) throw new Error(decisionMessage("encode_unknown_column", payload));
+    log.push("encode_unknown_column", payload);
   }
+  // A consumer's own advisories sit ahead of everything resolve() works out for itself.
+  log.add(...consumerDecisions(data));
 
   // Scatter/bubble: x AND y are measures, one row = one point. Skip the dimension/aggregate path
   // entirely (aggregating would collapse the cloud) — handled by its own branch below.
@@ -102,11 +106,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   });
 
   // Scatter/bubble: own branch — two measures as a point cloud, no aggregation/pivot/sort.
-  if (isScatter) return withNotes(resolveScatter(rows, fields, encode, opts), data.notes);
+  if (isScatter) return withDecisions(resolveScatter(rows, fields, encode, opts, log), log);
   // Funnel: stages (a dimension) + a value, no axes — own branch.
-  if (opts.chartType === "funnel") return withNotes(resolveFunnel(rows, fields, encode, opts), data.notes);
+  if (opts.chartType === "funnel") return withDecisions(resolveFunnel(rows, fields, encode, opts, log), log);
   // Waterfall: ordered steps with signed deltas; first/last (or a marked column) are totals.
-  if (opts.chartType === "waterfall") return withNotes(resolveWaterfall(rows, fields, encode, opts), data.notes);
+  if (opts.chartType === "waterfall") return withDecisions(resolveWaterfall(rows, fields, encode, opts, log), log);
 
   // --- x-axis: encode wins, then first time field, then first dimension ---
   const timeField = fields.find((f) => f.role === "time");
@@ -135,23 +139,25 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // No pivot, no series selection, no time-fill — those are chart concerns and would
   // silently drop the text columns a table is meant to show.
   if (chartType === "table") {
-    return {
-      chartType: "table",
-      data: rows,
-      x: "",
-      series: [],
-      legend: false,
-      ...(data.notes?.length && { notes: data.notes }),
-      ...(opts.title && { title: opts.title }),
-      columns: fields.map((f) => ({
-        key: f.name,
-        label: f.label ?? f.name,
-        ...(f.format && { format: f.format }),
-        ...(f.format === "percent" && { fraction: isFractionScale(rows, [f.name]) }),
-        ...(f.currency && { currency: f.currency }),
-        ...(f.granularity && { granularity: f.granularity }),
-      })),
-    };
+    return withDecisions(
+      {
+        chartType: "table",
+        data: rows,
+        x: "",
+        series: [],
+        legend: false,
+        ...(opts.title && { title: opts.title }),
+        columns: fields.map((f) => ({
+          key: f.name,
+          label: f.label ?? f.name,
+          ...(f.format && { format: f.format }),
+          ...(f.format === "percent" && { fraction: isFractionScale(rows, [f.name]) }),
+          ...(f.currency && { currency: f.currency }),
+          ...(f.granularity && { granularity: f.granularity }),
+        })),
+      },
+      log,
+    );
   }
 
   // Normalize x values (nulls, booleans) for plotting.
@@ -175,15 +181,11 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     encode.series ??
     (timeField && dimField && dimField.name !== x && dimField.kind === "string" ? dimField.name : undefined);
 
-  const notes: string[] = [...(data.notes ?? [])];
-
   // Loose-date note (advisory only): a string x whose values look like non-ISO dates
   // (MM/DD/YYYY, "Jan 2025", ...) is plotted as unordered categories, not a sorted time axis. We
   // don't parse (MM/DD vs DD/MM is ambiguous) — we tell the author to return ISO dates instead.
   if (x && xField?.kind === "string" && rows.some((r) => looksLikeLooseDate(r[x]))) {
-    notes.push(
-      `Column "${x}" looks like non-ISO dates; plotted as unordered categories. Return ISO dates (YYYY-MM-DD) for a sorted time axis.`,
-    );
+    log.push("loose_dates", { column: x });
   }
 
   let series: SeriesSpec[];
@@ -192,15 +194,9 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     const result = pivotData(rows, x, pivotDim, yNames[0]!);
     rows = result.data;
     series = result.seriesKeys.map((key) => ({ key, label: key }));
-    if (result.collapsed > 0)
-      notes.push(
-        `Summed ${result.collapsed} row(s) that shared the same ${x} + ${pivotDim} — the data looked unaggregated.`,
-      );
+    if (result.collapsed > 0) log.push("dedupe_sum", { collapsed: result.collapsed, x, seriesDimension: pivotDim });
     // The pivot path can't also carry a right-axis measure; say so instead of dropping it silently.
-    if (y2Names.length > 0)
-      notes.push(
-        `Secondary-axis measure(s) ${y2Names.map((n) => `"${n}"`).join(", ")} were dropped because the chart is split into series by ${pivotDim}.`,
-      );
+    if (y2Names.length > 0) log.push("y2_dropped_on_pivot", { columns: y2Names, seriesDimension: pivotDim });
     // Too many series = an indistinguishable color soup. Keep the largest by total, fold the
     // rest into one "Other" series (stacking is part-to-whole, so the total must be preserved).
     if (series.length > MAX_SERIES) {
@@ -216,7 +212,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
         r.Other = other;
       }
       series = [...series.filter((s) => !dropKeys.has(s.key)), { key: "Other", label: "Other" }];
-      notes.push(`Grouped ${drop.length} smaller series into "Other".`);
+      log.push("series_fold", { folded: drop.length, group: "series" });
     }
   } else {
     // Left-axis series + (optional) right-axis series for a dual-axis combo.
@@ -252,13 +248,10 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
       );
       rows = agg.rows;
       if (agg.collapsed > 0) {
-        notes.push(`Summed ${agg.collapsed} row(s) that shared the same ${x} — the data looked unaggregated.`);
+        log.push("dedupe_sum", { collapsed: agg.collapsed, x });
         // Summing is right for counts, wrong for rates/ratios — flag it so the agent can pre-aggregate.
         const rateCols = series.filter((s) => byName.get(s.key)?.format === "percent").map((s) => s.key);
-        if (rateCols.length)
-          notes.push(
-            `${rateCols.map((c) => `"${c}"`).join(", ")} looks like a rate; summing rates is usually wrong — compute SUM(numerator)/SUM(denominator) in SQL instead.`,
-          );
+        if (rateCols.length) log.push("rate_sum_hazard", { columns: rateCols });
       }
     }
   }
@@ -267,23 +260,21 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
   // a value column that arrived as strings (typed as a dimension) or a fields/encode declaration
   // that left no measure. Note it (or throw under strict) instead of rendering a silent blank.
   if (series.length === 0) {
-    const msg =
-      "No measure column to plot - the chart has no data series. Check that value columns contain numbers (not strings), or declare types via fields.";
-    if (opts.strict) throw new Error(msg);
-    notes.push(msg);
+    if (opts.strict) throw new Error(decisionMessage("no_measure"));
+    log.push("no_measure");
   }
 
   // Forced-type precondition notes: the shape doesn't fit the requested chart, so we reinterpreted
   // rather than reject. Say what we did (strict throws) so the author isn't left guessing.
   if (opts.chartType === "pie" && series.length > 1) {
-    const msg = `A pie needs one category + one measure; got ${series.length} measures - showing them as separate slices, which is usually not what a pie means.`;
-    if (opts.strict) throw new Error(msg);
-    notes.push(msg);
+    const payload = { chartType: "pie", measures: series.length };
+    if (opts.strict) throw new Error(decisionMessage("forced_type_mismatch", payload));
+    log.push("forced_type_mismatch", payload);
   }
   if (opts.chartType === "line" && xField?.kind === "string" && series.length > 0) {
-    const msg = `A line over categorical "${x}" implies an order that may not exist; consider a bar chart.`;
-    if (opts.strict) throw new Error(msg);
-    notes.push(msg);
+    const payload = { chartType: "line", column: x };
+    if (opts.strict) throw new Error(decisionMessage("forced_type_mismatch", payload));
+    log.push("forced_type_mismatch", payload);
   }
 
   // Sort a time / numeric x ascending. Agent SQL often omits ORDER BY, which makes lines
@@ -308,7 +299,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     const total = (r: Record<string, unknown>) => series.reduce((a, s) => a + (Number(r[s.key]) || 0), 0);
     const keep = new Set([...rows].sort((a, b) => total(b) - total(a)).slice(0, MAX_BARS));
     rows = rows.filter((r) => keep.has(r));
-    notes.push(`Showing the top ${rows.length} of ${origLen} categories by value.`);
+    log.push("bar_cap", { kept: rows.length, total: origLen });
   }
 
   // Very dense line/area: stride-downsample to bound the payload (keep every Nth point + the
@@ -319,7 +310,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     const sampled = rows.filter((_, i) => i % step === 0);
     if (sampled[sampled.length - 1] !== rows[origLen - 1]) sampled.push(rows[origLen - 1]!);
     rows = sampled;
-    notes.push(`Downsampled ${origLen} points to ${rows.length} for display.`);
+    log.push("downsample", { from: origLen, to: rows.length });
   }
 
   // Stacked modes: zero-fill missing (x, series) cells so stacks stay aligned (a missing cell
@@ -338,7 +329,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     if (!rows.some((r) => Number(r[k]) > 0)) {
       const neg = rows.filter((r) => r[k] != null && Number(r[k]) < 0);
       rows = neg.map((r) => ({ ...r, [k]: Math.abs(Number(r[k])) }));
-      if (rows.length > 0) notes.push("All values were negative — showing their magnitudes.");
+      if (rows.length > 0) log.push("pie_negative_magnitudes");
     } else {
       rows = rows.filter((r) => r[k] != null && Number(r[k]) > 0);
     }
@@ -351,7 +342,7 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
       const kept = rows.filter((r, i) => !isSmall(r, i));
       const other = small.reduce((sum, r) => sum + (Number(r[k]) || 0), 0);
       rows = [...kept, { [x]: "Other", [k]: other }];
-      notes.push(`Grouped ${small.length} small slices into "Other".`);
+      log.push("pie_fold", { folded: small.length });
     }
   }
 
@@ -405,28 +396,31 @@ export function resolve(data: ChartData, opts: ResolveOptions = {}): ChartSpec {
     if (opts.reference.target != null) reference.push({ value: opts.reference.target, label: "Target" });
   }
 
-  return {
-    chartType,
-    data: rows,
-    x,
-    series,
-    ...(reference.length > 0 && { reference }),
-    ...(Object.keys(xAxis).length > 0 && { xAxis }),
-    ...(Object.keys(yAxis).length > 0 && { yAxis }),
-    ...(yAxisRight && Object.keys(yAxisRight).length > 0 && { yAxisRight }),
-    legend: series.length > 1,
-    ...(opts.stacking && { stacking: opts.stacking }),
-    ...(horizontal != null && { horizontal }),
-    ...(opts.title && { title: opts.title }),
-    columns,
-    ...(notes.length > 0 && { notes }),
-  };
+  return withDecisions(
+    {
+      chartType,
+      data: rows,
+      x,
+      series,
+      ...(reference.length > 0 && { reference }),
+      ...(Object.keys(xAxis).length > 0 && { xAxis }),
+      ...(Object.keys(yAxis).length > 0 && { yAxis }),
+      ...(yAxisRight && Object.keys(yAxisRight).length > 0 && { yAxisRight }),
+      legend: series.length > 1,
+      ...(opts.stacking && { stacking: opts.stacking }),
+      ...(horizontal != null && { horizontal }),
+      ...(opts.title && { title: opts.title }),
+      columns,
+    },
+    log,
+  );
 }
 
-// Prepend data-source notes (e.g. a truncation warning) to a spec from a branch that doesn't
-// build its own notes list.
-function withNotes(spec: ChartSpec, notes?: string[]): ChartSpec {
-  return notes?.length ? { ...spec, notes: [...notes, ...(spec.notes ?? [])] } : spec;
+// Attach the log to the spec: the structured decisions plus their messages as the legacy `notes`
+// projection, in the order they were recorded.
+function withDecisions(spec: ChartSpec, log: DecisionLog): ChartSpec {
+  if (log.size === 0) return spec;
+  return { ...spec, notes: log.messages(), decisions: log.decisions() };
 }
 
 // Scatter/bubble: x and y are measures (one row = one point). No aggregation, pivot, or sort — that
@@ -436,6 +430,7 @@ function resolveScatter(
   fields: FieldMeta[],
   encode: Encode,
   opts: ResolveOptions,
+  log: DecisionLog,
 ): ChartSpec {
   const byName = new Map(fields.map((f) => [f.name, f]));
   const measures = fields.filter((f) => f.role === "measure");
@@ -464,12 +459,11 @@ function resolveScatter(
   // Dense scatters overplot into an unreadable mass. Sample down to a cap (mirrors the line/area
   // MAX_POINTS idiom) so the cloud stays legible; small scatters pass through untouched. Stride
   // sampling preserves the overall shape/extent while thinning uniformly.
-  const scatterNotes: string[] = [];
   if (rows.length > MAX_SCATTER_POINTS) {
     const origLen = rows.length;
     const step = Math.ceil(origLen / MAX_SCATTER_POINTS);
     rows = rows.filter((_, i) => i % step === 0);
-    scatterNotes.push(`Showing a sample of ${rows.length} of ${origLen} points.`);
+    log.push("scatter_sample", { kept: rows.length, total: origLen });
   }
 
   const colMeta = (k: string, f = byName.get(k)) => ({
@@ -514,10 +508,7 @@ function resolveScatter(
         ...(pointLabel && { [pointLabel]: r[pointLabel] }),
       };
     });
-    const notes = [
-      ...scatterNotes,
-      ...(capped ? [`Grouped ${ordered.length - kept.size} smaller categories into "Other".`] : []),
-    ];
+    if (capped) log.push("series_fold", { folded: ordered.length - kept.size, group: "categories" });
     return {
       chartType: "scatter",
       data,
@@ -529,7 +520,6 @@ function resolveScatter(
       yAxis,
       legend: true,
       ...(opts.title && { title: opts.title }),
-      ...(notes.length && { notes }),
       columns: [
         colMeta(x),
         ...groupCols.map((g) => ({
@@ -556,7 +546,6 @@ function resolveScatter(
     yAxis,
     legend: false,
     ...(opts.title && { title: opts.title }),
-    ...(scatterNotes.length && { notes: scatterNotes }),
     columns,
   };
 }
@@ -567,6 +556,7 @@ function resolveFunnel(
   fields: FieldMeta[],
   encode: Encode,
   opts: ResolveOptions,
+  log: DecisionLog,
 ): ChartSpec {
   const byName = new Map(fields.map((f) => [f.name, f]));
   const dim = encode.x ?? fields.find((f) => f.role === "dimension")?.name;
@@ -590,11 +580,10 @@ function resolveFunnel(
   };
   // No real category to stage the funnel: the stage column is a promoted measure (its values, not a
   // dimension, became the labels). Say so (strict throws) instead of silently reinterpreting.
-  const notes: string[] = [];
   if (!encode.x && byName.get(dim)?.kind === "number") {
-    const msg = `A funnel needs a stage/label column and one measure; got only measures - using "${dim}" values as stage labels.`;
-    if (opts.strict) throw new Error(msg);
-    notes.push(msg);
+    const payload = { chartType: "funnel", column: dim };
+    if (opts.strict) throw new Error(decisionMessage("forced_type_mismatch", payload));
+    log.push("forced_type_mismatch", payload);
   }
   return {
     chartType: "funnel",
@@ -604,7 +593,6 @@ function resolveFunnel(
     legend: false,
     ...(opts.title && { title: opts.title }),
     columns: [dim, value].map(colMeta),
-    ...(notes.length && { notes }),
   };
 }
 
@@ -617,6 +605,7 @@ function resolveWaterfall(
   fields: FieldMeta[],
   encode: Encode,
   opts: ResolveOptions,
+  log: DecisionLog,
 ): ChartSpec {
   const byName = new Map(fields.map((f) => [f.name, f]));
   const dim = encode.x ?? fields.find((f) => f.role === "dimension")?.name;
@@ -644,11 +633,7 @@ function resolveWaterfall(
     ? rows.filter((r) => TOTAL_RE.test(String(r[markerCol.name]))).map((r) => String(r[dim]))
     : [String(rows[0]![dim]), String(rows[rows.length - 1]![dim])];
   // Say when we guessed: a pure-delta input has no totals, so defaulting first/last would be wrong.
-  const notes = markerCol
-    ? []
-    : [
-        "No totals column found, so the first and last rows are treated as the opening and closing totals. Mark a column (e.g. type = total) to change this.",
-      ];
+  if (!markerCol) log.push("waterfall_totals_guess");
 
   const valField = byName.get(value);
   const colMeta = (k: string) => {
@@ -666,7 +651,6 @@ function resolveWaterfall(
     x: dim,
     series: [{ key: value, label: valField?.label ?? value }],
     ...(totals.length > 0 && { totals: [...new Set(totals)] }),
-    ...(notes.length && { notes }),
     yAxis: {
       ...(valField?.label && { label: valField.label }),
       ...(valField?.format && { format: valField.format }),

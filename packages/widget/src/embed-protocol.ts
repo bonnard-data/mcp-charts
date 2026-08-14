@@ -6,6 +6,7 @@
 // @bonnard/mcp-charts stays TYPE-ONLY, because a runtime import would invert the build order (core
 // embeds the built widget). `test-embed-limits-parity` fails if the two copies drift.
 import type { ChartSpec, DashboardItem, DashboardSpec } from "@bonnard/mcp-charts";
+import { ALL_AUDIENCES, isAudience } from "./decisions.js";
 
 /** A payload the widget can render: a whole chart, a whole dashboard, or one bare cell. */
 export type EmbedPayload = ChartSpec | DashboardSpec | DashboardItem;
@@ -83,6 +84,8 @@ function validateDashboard(spec: DashboardSpec): EmbedValidationError | null {
   }
   const notes = validateNotes(spec.notes, "dashboard");
   if (notes) return notes;
+  const decisions = validateDecisions(spec.decisions, "dashboard");
+  if (decisions) return decisions;
   for (let i = 0; i < spec.items.length; i++) {
     const e = validateItem(spec.items[i], `items[${i}]`);
     if (e) return e;
@@ -94,9 +97,12 @@ function validateItem(item: unknown, where: string): EmbedValidationError | null
   if (!item || typeof item !== "object" || Array.isArray(item)) {
     return err("invalid-payload", `${where} must be a dashboard item object`);
   }
-  const it = item as { spec?: unknown; type?: unknown; id?: unknown; span?: unknown };
+  const it = item as { spec?: unknown; type?: unknown; id?: unknown; span?: unknown; error?: unknown };
   if (it.id !== undefined && !isBoundedString(it.id)) {
     return err("invalid-payload", `${where}.id must be a string`);
+  }
+  if (it.error !== undefined && !isBoundedString(it.error)) {
+    return err("invalid-payload", `${where}.error must be a string`);
   }
   if (it.span !== undefined && !isFiniteNumber(it.span)) {
     return err("invalid-payload", `${where}.span must be a number`);
@@ -152,6 +158,8 @@ function validateChart(spec: ChartSpec, where: string): EmbedValidationError | n
   }
   const notes = validateNotes(spec.notes, where);
   if (notes) return notes;
+  const decisions = validateDecisions(spec.decisions, where);
+  if (decisions) return decisions;
 
   // A table renders from `columns`; every other chart type needs `series`.
   if (spec.chartType === "table") {
@@ -189,6 +197,30 @@ function validateChart(spec: ChartSpec, where: string): EmbedValidationError | n
     const keys = Object.keys(row);
     if (keys.length > EMBED_LIMITS.maxRowKeys) {
       return err("payload-too-large", `${where}.data row has ${keys.length} keys (max ${EMBED_LIMITS.maxRowKeys})`);
+    }
+  }
+  return null;
+}
+
+/** Same bounds as `notes`, plus the decision shape. An unknown `kind` is fine (a consumer may
+ *  define its own); an unknown audience is not, since it would silently widen who sees a caption. */
+function validateDecisions(decisions: unknown, where: string): EmbedValidationError | null {
+  if (decisions === undefined) return null;
+  if (!Array.isArray(decisions)) return err("invalid-payload", `${where}.decisions must be an array`);
+  if (decisions.length > EMBED_LIMITS.maxNotes) {
+    return err("payload-too-large", `${where}.decisions exceeds ${EMBED_LIMITS.maxNotes}`);
+  }
+  for (const d of decisions) {
+    if (!d || typeof d !== "object" || Array.isArray(d)) {
+      return err("invalid-payload", `${where}.decisions entries must be objects`);
+    }
+    const entry = d as { kind?: unknown; message?: unknown; audiences?: unknown };
+    if (!isBoundedString(entry.kind)) return err("invalid-payload", `${where}.decisions entries need a string kind`);
+    if (!isBoundedString(entry.message)) {
+      return err("invalid-payload", `${where}.decisions entries need a string message`);
+    }
+    if (!Array.isArray(entry.audiences) || !entry.audiences.every(isAudience)) {
+      return err("invalid-payload", `${where}.decisions audiences must be a subset of ${ALL_AUDIENCES.join(", ")}`);
     }
   }
   return null;

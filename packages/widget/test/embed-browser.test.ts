@@ -7,6 +7,7 @@
 // iframe, which is the posture the docs tell consumers to use.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Browser, Page } from "puppeteer-core";
+import { resolve } from "@bonnard/mcp-charts";
 import { CHART, KPI, TABLE, installDriver, launchBrowser, startServer, type Captured } from "./browser-helpers.js";
 
 let browser: Browser;
@@ -615,5 +616,46 @@ describe("no fragment: the MCP host path is untouched", () => {
     await settle(1200);
     const msgs = await log();
     expect(msgs.some((m) => m.type === "rpc:ui/initialize")).toBe(true);
+  });
+});
+
+describe("decision audiences in the built widget", () => {
+  // A genuine advisory, produced by core rather than hand-written: 40 categories over the 30-bar
+  // cap gives a viewer caption, and a typo'd encode column gives an author-only one.
+  const capped = resolve(
+    {
+      rows: Array.from({ length: 40 }, (_, i) => ({ region: `region ${i}`, revenue: i + 1 })),
+      fields: [
+        { name: "region", role: "dimension", kind: "string" },
+        { name: "revenue", role: "measure", kind: "number" },
+      ],
+      encode: { y: "revenue", size: "revenu" },
+    },
+    { chartType: "bar" },
+  );
+
+  it("captions the viewer decision and holds back the author one by default", async () => {
+    expect(capped.decisions?.map((d) => d.kind)).toEqual(["encode_unknown_column", "bar_cap"]);
+    await mountAndWait("#embed", { sandbox: false });
+    await renderAndSettle({ payload: capped });
+    const html = (await state()).rootHTML;
+    expect(html).toContain("Showing the top 30 of 40 categories by value.");
+    expect(html).not.toContain("Ignored unknown encode column");
+  });
+
+  it("audiences=all captions every decision", async () => {
+    await mountAndWait("#embed&audiences=all", { sandbox: false });
+    await renderAndSettle({ payload: capped });
+    const html = (await state()).rootHTML;
+    expect(html).toContain("Showing the top 30 of 40 categories by value.");
+    expect(html).toContain("Ignored unknown encode column");
+  });
+
+  it("audiences=none drops the captions but never the cell's error", async () => {
+    await mountAndWait("#embed&audiences=none", { sandbox: false });
+    await renderAndSettle({ payload: { spec: capped, error: "Query timed out" } });
+    const html = (await state()).rootHTML;
+    expect(html).not.toContain("Showing the top 30");
+    expect(html).toContain('<div class="cell-error">Query timed out</div>');
   });
 });

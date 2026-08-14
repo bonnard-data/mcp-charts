@@ -16,7 +16,7 @@ import type {
 } from "./types.js";
 import { resolve } from "./resolve/resolve.js";
 import { inferFields } from "./resolve/infer.js";
-import { warnUntypedColumns } from "./validate.js";
+import { mergeAdvisories } from "./validate.js";
 import { isChartSpec, isDashboardSpec } from "./dashboard.js";
 import { registerChartWidget, CHART_RESOURCE_URI } from "./charts.js";
 
@@ -53,17 +53,6 @@ function toChartData(source: Record<string, unknown>[] | ChartData, opts: { fiel
     encode: opts.encode ?? source.encode,
     notes: source.notes,
   };
-}
-
-// Merge integrator advisories (numbers-as-strings, wrapper objects) into a spec's notes, deduped.
-// After numeric-string recovery these are "recovered" signals, so they surface on the views path
-// the way visualize already surfaces them (visualize logs them itself; don't double up there).
-function mergeAdvisories(spec: ChartSpec, data: ChartData): ChartSpec {
-  const advisories = warnUntypedColumns(data);
-  if (advisories.length === 0) return spec;
-  const notes = [...(spec.notes ?? [])];
-  for (const a of advisories) if (!notes.includes(a)) notes.push(a);
-  return { ...spec, notes };
 }
 
 /**
@@ -111,6 +100,7 @@ export function explain(source: Record<string, unknown>[] | ChartData, opts: Cha
     x: spec.x,
     series: spec.series.map((s) => s.key),
     notes: spec.notes ?? [],
+    decisions: spec.decisions ?? [],
   };
 }
 
@@ -154,6 +144,9 @@ export const DASHBOARD_OUTPUT_SCHEMA = {
   columns: z.number().optional(),
   items: z.array(z.record(z.string(), z.unknown())),
   notes: z.array(z.string()).optional(),
+  // Undeclared fields are stripped from structuredContent by the MCP SDK, so decisions must be
+  // named here to survive the trip to the host.
+  decisions: z.array(z.record(z.string(), z.unknown())).optional(),
 };
 
 // render_view returns a ChartSpec, a DashboardSpec, or (with item_id) a single cell's ChartSpec, so

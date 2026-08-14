@@ -47,16 +47,35 @@ describe("parseEmbedFragment", () => {
     expect(parseEmbedFragment("#not-embed")).toBeNull();
   });
 
-  it("bare #embed: untitled, notes on, no theme override", () => {
-    expect(parseEmbedFragment("#embed")).toEqual({ titled: false, theme: undefined, notes: true });
+  it("bare #embed: untitled, viewer captions only, no theme override", () => {
+    expect(parseEmbedFragment("#embed")).toEqual({ titled: false, theme: undefined, audiences: ["viewer"] });
   });
 
   it("parses flags after #embed", () => {
-    expect(parseEmbedFragment("#embed&titled=true&theme=dark&notes=false")).toEqual({
+    expect(parseEmbedFragment("#embed&titled=true&theme=dark&audiences=none")).toEqual({
       titled: true,
       theme: "dark",
-      notes: false,
+      audiences: [],
     });
+  });
+
+  it("parses the audience list, `all`, and `none`", () => {
+    const audiences = (hash: string) => parseEmbedFragment(hash)?.audiences;
+    expect(audiences("#embed&audiences=viewer,author")).toEqual(["viewer", "author"]);
+    expect(audiences("#embed&audiences=agent")).toEqual(["agent"]);
+    expect(audiences("#embed&audiences=all")).toEqual(["viewer", "author", "agent"]);
+    expect(audiences("#embed&audiences=none")).toEqual([]);
+    // An unrecognized value keeps the default rather than silently blanking every caption.
+    expect(audiences("#embed&audiences=nobody")).toEqual(["viewer"]);
+  });
+
+  it("keeps the deprecated notes flag working: false hides captions, true is the viewer default", () => {
+    const audiences = (hash: string) => parseEmbedFragment(hash)?.audiences;
+    expect(audiences("#embed&notes=false")).toEqual([]);
+    expect(audiences("#embed&notes=true")).toEqual(["viewer"]);
+    expect(audiences("#embed&notes")).toEqual(["viewer"]);
+    // audiences wins when both are given.
+    expect(audiences("#embed&notes=false&audiences=all")).toEqual(["viewer", "author", "agent"]);
   });
 
   it("bare and 1/true flag spellings all read as on", () => {
@@ -68,7 +87,11 @@ describe("parseEmbedFragment", () => {
   });
 
   it("ignores an unknown theme and unknown flags (forward compatibility)", () => {
-    expect(parseEmbedFragment("#embed&theme=neon&kiosk=2")).toEqual({ titled: false, theme: undefined, notes: true });
+    expect(parseEmbedFragment("#embed&theme=neon&kiosk=2")).toEqual({
+      titled: false,
+      theme: undefined,
+      audiences: ["viewer"],
+    });
   });
 
   it("accepts #embed? as well as #embed&", () => {

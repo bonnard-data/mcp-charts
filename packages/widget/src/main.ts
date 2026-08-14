@@ -29,6 +29,7 @@ import {
   type EmbedSizing,
 } from "./embed.js";
 import { selectItem, validatePayload, type BonnardErrorCode, type BonnardWidgetMessage } from "./embed-protocol.js";
+import { ALL_AUDIENCES } from "./decisions.js";
 
 const root = document.getElementById("root")!;
 
@@ -174,10 +175,11 @@ function mountChart(el: HTMLElement, spec: ChartSpec) {
   observers.push(ro);
 }
 
-// Embed mode suppresses the widget's own title and (opt-out) the guardrail notes.
+// Embed mode suppresses the widget's own title and narrows the captions to its configured
+// audiences (viewer-only unless the consumer asked for more). An MCP host shows all of them.
 const showTitle = () => !embed || embed.titled;
-const showNotes = () => !embed || embed.notes;
-const notesFor = (spec: ChartSpec) => (showNotes() ? renderChartNotes(spec) : "");
+const audiences = () => embed?.audiences ?? ALL_AUDIENCES;
+const notesFor = (spec: ChartSpec) => renderChartNotes(spec, audiences());
 
 /**
  * The title above a single cell, honoured for every single-cell shape (chart, table, bare cell,
@@ -224,7 +226,7 @@ function paintCell(el: HTMLElement, spec: ChartSpec) {
 
 function renderDashboard(spec: DashboardSpec) {
   teardown();
-  root.innerHTML = renderDashboardShell(spec, { titled: showTitle(), notes: showNotes() });
+  root.innerHTML = renderDashboardShell(spec, { titled: showTitle(), audiences: audiences() });
   spec.items.forEach((item, i) => {
     if (!("spec" in item)) return; // kpi/text cells are already final HTML
     const el = document.getElementById(`cell-${i}`);
@@ -235,7 +237,7 @@ function renderDashboard(spec: DashboardSpec) {
 // One cell, no `.cell` chrome. Embed mode's core render: a bare DashboardItem, or a selected cell.
 function renderItemOnly(item: DashboardItem) {
   teardown();
-  root.innerHTML = soloTitle(item) + renderSingleItem(item, { notes: showNotes() });
+  root.innerHTML = soloTitle(item) + renderSingleItem(item, { audiences: audiences() });
   if (!("spec" in item)) return;
   const el = document.getElementById("cell-0");
   if (el) paintCell(el, item.spec);

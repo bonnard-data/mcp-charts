@@ -244,6 +244,15 @@
         margin-top: 8px;
         overflow-wrap: anywhere;
       }
+      /* A failed cell, not an advisory: it reads as an error rather than a footnote, and no
+         audience filter hides it. */
+      .cell-error {
+        color: #dc2626;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 8px;
+        overflow-wrap: anywhere;
+      }
       /* Embed mode (`#embed`): the consumer owns spacing, chrome, and height. Everything below is
          inert without the `data-embed` root attribute set by embed.ts. */
       html[data-embed] body {
