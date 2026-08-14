@@ -49,6 +49,21 @@ async function renderAndSettle(message: Record<string, unknown>, ms = 600): Prom
   return (await log()).slice(before);
 }
 
+// A genuine advisory pair, produced by core rather than hand-written: 40 categories over the 30-bar
+// cap gives a viewer caption, and a typo'd encode column gives an author-only one. Shared by the
+// embed and harness audience specs, which filter the same spec through different controls.
+const capped = resolve(
+  {
+    rows: Array.from({ length: 40 }, (_, i) => ({ region: `region ${i}`, revenue: i + 1 })),
+    fields: [
+      { name: "region", role: "dimension", kind: "string" },
+      { name: "revenue", role: "measure", kind: "number" },
+    ],
+    encode: { y: "revenue", size: "revenu" },
+  },
+  { chartType: "bar" },
+);
+
 describe("embed mode: the ready handshake", () => {
   it("posts bonnard:ready promptly in an opaque sandboxed iframe", async () => {
     const latency = await mountAndWait("#embed");
@@ -597,6 +612,44 @@ describe("the harness dialect stays separate and unchanged", () => {
     expect(s.hasSvg).toBe(false);
     expect(s.rootHTML).toContain("Waiting for chart data");
   });
+
+  // The harness's audience toggle is only worth having if the widget honours it, and the gallery
+  // cannot prove that about itself. `#embed` reads its audiences from the fragment, which is fixed
+  // for the life of the frame; the harness needs to flip them on a live frame, so it sends them.
+  it("#harness renders the audiences the message asks for, and only those", async () => {
+    await page.evaluate((h) => window.__mount(h, { sandbox: false }), "#harness");
+    await settle(600);
+
+    await send({ type: "bonnard:harness-render", structuredContent: capped, audiences: ["viewer"] });
+    await settle(900);
+    let html = (await state()).rootHTML;
+    expect(html).toContain("Showing the top 30 of 40 categories by value.");
+    expect(html).not.toContain("Ignored unknown encode column");
+
+    await send({ type: "bonnard:harness-render", structuredContent: capped, audiences: ["author"] });
+    await settle(900);
+    html = (await state()).rootHTML;
+    expect(html).toContain("Ignored unknown encode column");
+    expect(html).not.toContain("Showing the top 30");
+  });
+
+  it("#harness shows every audience when the message names none, or names them badly", async () => {
+    await page.evaluate((h) => window.__mount(h, { sandbox: false }), "#harness");
+    await settle(600);
+
+    await send({ type: "bonnard:harness-render", structuredContent: capped });
+    await settle(900);
+    let html = (await state()).rootHTML;
+    expect(html).toContain("Showing the top 30 of 40 categories by value.");
+    expect(html).toContain("Ignored unknown encode column");
+
+    // A malformed list must not narrow anything: a dropped caption is the worse failure here.
+    await send({ type: "bonnard:harness-render", structuredContent: capped, audiences: ["everyone"] });
+    await settle(900);
+    html = (await state()).rootHTML;
+    expect(html).toContain("Showing the top 30 of 40 categories by value.");
+    expect(html).toContain("Ignored unknown encode column");
+  });
 });
 
 describe("no fragment: the MCP host path is untouched", () => {
@@ -620,20 +673,6 @@ describe("no fragment: the MCP host path is untouched", () => {
 });
 
 describe("decision audiences in the built widget", () => {
-  // A genuine advisory, produced by core rather than hand-written: 40 categories over the 30-bar
-  // cap gives a viewer caption, and a typo'd encode column gives an author-only one.
-  const capped = resolve(
-    {
-      rows: Array.from({ length: 40 }, (_, i) => ({ region: `region ${i}`, revenue: i + 1 })),
-      fields: [
-        { name: "region", role: "dimension", kind: "string" },
-        { name: "revenue", role: "measure", kind: "number" },
-      ],
-      encode: { y: "revenue", size: "revenu" },
-    },
-    { chartType: "bar" },
-  );
-
   it("captions the viewer decision and holds back the author one by default", async () => {
     expect(capped.decisions?.map((d) => d.kind)).toEqual(["encode_unknown_column", "bar_cap"]);
     await mountAndWait("#embed", { sandbox: false });

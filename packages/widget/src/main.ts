@@ -6,7 +6,7 @@
 // bridge, so nothing it does can be sequenced behind a handshake that an ordinary parent will
 // never answer.
 import { App } from "@modelcontextprotocol/ext-apps";
-import type { ChartSpec, DashboardItem, DashboardSpec } from "@bonnard/mcp-charts";
+import type { ChartSpec, DashboardItem, DashboardSpec, DecisionAudience } from "@bonnard/mcp-charts";
 import { echarts, themeName } from "./echarts-core.js";
 import { specToOption } from "./spec-to-option.js";
 import { renderTable, renderEmptyState } from "./table.js";
@@ -29,7 +29,7 @@ import {
   type EmbedSizing,
 } from "./embed.js";
 import { selectItem, validatePayload, type BonnardErrorCode, type BonnardWidgetMessage } from "./embed-protocol.js";
-import { ALL_AUDIENCES } from "./decisions.js";
+import { ALL_AUDIENCES, isAudience } from "./decisions.js";
 
 const root = document.getElementById("root")!;
 
@@ -45,6 +45,9 @@ let lastItem: DashboardItem | undefined;
 // Theme precedence: an explicit theme from a render message outranks the fragment, which outranks
 // the host/OS. Once a message sets a theme it persists, so a later host refresh cannot revert it.
 let messageTheme: "light" | "dark" | undefined;
+// The dev harness's audience filter, so flipping viewer/author/agent there repaints the same
+// captions a consumer would see. Never set outside `#harness`, and outranked by an embed's own.
+let harnessAudiences: readonly DecisionAudience[] | undefined;
 // Set only when the MCP Apps bridge exists (never in embed mode), so theme detection can consult
 // the host context without embed mode depending on the bridge.
 let getHostTheme: () => string | undefined = () => undefined;
@@ -178,7 +181,7 @@ function mountChart(el: HTMLElement, spec: ChartSpec) {
 // Embed mode suppresses the widget's own title and narrows the captions to its configured
 // audiences (viewer-only unless the consumer asked for more). An MCP host shows all of them.
 const showTitle = () => !embed || embed.titled;
-const audiences = () => embed?.audiences ?? ALL_AUDIENCES;
+const audiences = () => embed?.audiences ?? harnessAudiences ?? ALL_AUDIENCES;
 const notesFor = (spec: ChartSpec) => renderChartNotes(spec, audiences());
 
 /**
@@ -341,8 +344,12 @@ if (isHarness) {
       structuredContent?: unknown;
       text?: string;
       theme?: "light" | "dark";
+      audiences?: unknown;
     } | null;
     if (d?.type !== "bonnard:harness-render") return;
+    // A malformed list falls back to showing everything, matching the posture everywhere else here:
+    // the harness is a diagnostic surface, so hiding a caption is the worse failure.
+    if (Array.isArray(d.audiences) && d.audiences.every(isAudience)) harnessAudiences = d.audiences;
     if (d.theme === "light" || d.theme === "dark") applyTheme(d.theme);
     paint(d.structuredContent, d.text);
   });
