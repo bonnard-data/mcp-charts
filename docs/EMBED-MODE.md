@@ -88,20 +88,28 @@ after `#embed` parses as a query string.
 
 ```
 /chart-widget#embed
-/chart-widget#embed&titled=true&theme=dark&notes=false
+/chart-widget#embed&titled=true&theme=dark&audiences=viewer,author
 ```
 
-| Flag     | Values          | Default | Effect                                                                        |
-| -------- | --------------- | ------- | ----------------------------------------------------------------------------- |
-| `titled` | `true`, `false` | `false` | Draw the widget's own title. Off by default, since you usually draw a header.  |
-| `theme`  | `light`, `dark` | host    | Force a theme. Otherwise the widget follows the host or OS preference.         |
-| `notes`  | `true`, `false` | `true`  | Draw guardrail advisories ("Showing the top 30 of 1000...").                   |
+| Flag        | Values                                   | Default    | Effect                                                                       |
+| ----------- | ---------------------------------------- | ---------- | ---------------------------------------------------------------------------- |
+| `titled`    | `true`, `false`                          | `false`    | Draw the widget's own title. Off by default, since you usually draw a header. |
+| `theme`     | `light`, `dark`                          | host       | Force a theme. Otherwise the widget follows the host or OS preference.        |
+| `audiences` | `viewer`, `author`, `agent`, `all`, `none` | `viewer` | Which decisions the widget captions. Comma-separate to combine.               |
+| `notes`     | `true`, `false`                          | `true`     | Deprecated alias. `notes=false` is `audiences=none`; `audiences` wins.        |
 
 A bare flag reads as on: `#embed&titled` is `titled=true`. Unknown flags and unknown values are
 ignored, so a newer consumer URL is safe against an older widget.
 
-Leave `notes` on unless you surface the advisories yourself. They carry the reasons a chart looks the
-way it does: coerced columns, capped categories, an empty result. Hiding them hides a data problem.
+Each advisory in a spec's `decisions` names its audiences: `viewer` (a human reading the chart),
+`author` (whoever is building the view), and `agent` (a model deciding whether the data is safe to
+compute on). One advisory can name several. The default captions `viewer` decisions only, so a
+published dashboard still says why the chart looks the way it does ("Showing the top 30 of
+1000...") and leaves the authoring diagnostics out of the frame. Pass `audiences=viewer,author`
+while you build a view. Pass `audiences=none` only when you surface the advisories yourself.
+
+A spec built before `decisions` existed carries a flat `notes` array instead. The widget captions
+all of those whenever any audience is on, so an older payload still shows its advisories.
 
 ## Messages
 
@@ -152,7 +160,7 @@ stays. `code` is one of `invalid-payload`, `payload-too-large`, `item-not-found`
 `invalid-item-selector`, or `render-failed`. Set `renderId` on your render message to correlate it.
 
 Payloads are validated with bounds (see `EMBED_LIMITS`): rows, items, series/columns, string lengths,
-notes, and nesting depth. A payload past any bound is refused whole rather than truncated.
+notes and decisions, and nesting depth. A payload past any bound is refused whole rather than truncated.
 
 ## Sizing
 
@@ -305,7 +313,7 @@ The posture is the same one the MCP path ships with, and embed mode does not rel
 
 ### Public and semver-governed
 
-- The `#embed` fragment and its flags: `titled`, `theme`, `notes`.
+- The `#embed` fragment and its flags: `titled`, `theme`, `audiences`, and the deprecated `notes`.
 - The message types `bonnard:render`, `bonnard:ready`, `bonnard:size`, `bonnard:error`, and their
   documented fields.
 - The `EmbedTokens` keys, and the exported types (`BonnardRenderMessage`, `BonnardWidgetMessage`,
@@ -353,8 +361,9 @@ Deliberately not addressed yet, recorded so they are not mistaken for oversights
 
 - **Chart theming.** Tokens do not reach ECharts (axes, gridlines, legend, tooltip, series palette,
   chart text). Only `theme: "light" | "dark"` does. A future minor may add it.
-- **`notes=garbage` disables notes** instead of keeping the default. Fragment flags parse loosely:
-  anything that is not a truthy spelling reads as off. Pass `notes=true`/`notes=false` explicitly.
+- **`notes=garbage` disables notes** instead of keeping the default. The boolean flags parse loosely:
+  anything that is not a truthy spelling reads as off. `audiences` does keep the default on an
+  unrecognized value; pass `notes=true`/`notes=false` explicitly if you still use the older flag.
 - **Fragment parsing details are unspecified**: duplicate-key precedence, case sensitivity, and
   whether percent-encoded markers are supported. Use the documented spellings.
 - **The 240px minimum cannot force an unsized iframe taller.** A child cannot change its own frame's

@@ -1,142 +1,134 @@
-// Dev-only harness page. Renders the REAL widget (index.html#harness) in an iframe and feeds it a
-// ChartSpec/DashboardSpec via postMessage, exactly like a host delivers a tool result. The spec is
-// produced by core's resolve() imported FROM SOURCE, so editing either the renderer (main.ts,
-// spec-to-option.ts, dashboard.ts, table.ts) or core inference (resolve/*, validate.ts) hot-reloads
-// the preview. Never bundled into the shipped widget: vite build's input is index.html only.
-import { resolve } from "../../core/src/resolve/resolve.js";
-import type { ChartData, ResolveOptions, ChartSpec, DashboardSpec } from "@bonnard/mcp-charts";
-import { fixtures } from "../test/fixtures.js";
+// Dev-only harness page: a gallery of every fixture, rendered by the REAL widget.
+//
+// The gallery's thumbnails are SSR'd from the same renderer the iframe runs; opening one hands the
+// spec to a live widget over postMessage, exactly as a host delivers a tool result. Specs are built
+// with core imported FROM SOURCE, so editing the renderer (main.ts, spec-to-option.ts, dashboard.ts,
+// table.ts) or core inference (resolve/*, validate.ts) hot-reloads the preview.
+//
+// Never bundled into the shipped widget: vite build's input is index.html only, so nothing reachable
+// from here (this file or src/harness/*) can reach the artifact.
+import type { ChartType, DecisionKind } from "@bonnard/mcp-charts";
+import { createBridge } from "./harness/bridge.js";
+import { categories, decisionCounts, byId } from "./harness/catalog.js";
+import { mountGallery } from "./harness/gallery.js";
+import { mountOverlay } from "./harness/overlay.js";
+import { buildAiReport, copyText } from "./harness/report.js";
+import { audiencesFor } from "./harness/overlay.js";
+import { ALL_CATEGORY, createStore, hashState, type AudienceFilter, type Theme } from "./harness/state.js";
 
-type Mode = "data" | "spec";
-type Theme = "light" | "dark";
+const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const iframe = document.getElementById("stage") as HTMLIFrameElement;
-const editor = document.getElementById("editor") as HTMLTextAreaElement;
-const fixtureSel = document.getElementById("fixture") as HTMLSelectElement;
-const errEl = document.getElementById("err") as HTMLDivElement;
+const sidebar = el("sidebar");
+const grid = el("grid");
+const overlayRoot = el("overlay");
+const search = el<HTMLInputElement>("q");
+const typeSelect = el<HTMLSelectElement>("f-type");
+const kindSelect = el<HTMLSelectElement>("f-kind");
+const withDecisions = el<HTMLInputElement>("f-dec");
+const audienceSelect = el<HTMLSelectElement>("f-aud");
+const toastEl = el("toast");
 
-let mode: Mode = "data";
-let theme: Theme = "light";
+const store = createStore(hashState());
+const bridge = createBridge(el<HTMLIFrameElement>("stage"));
 
-// A dashboard example assembled from existing chart fixtures, so the dashboard renderer
-// (grid, cell notes, KPI/text tiles) is exercisable alongside single charts.
-function dashboardSample(): DashboardSpec {
-  const cell = (name: string, span = 1) => {
-    const f = fixtures.find((x) => x.name === name)!;
-    return { type: "chart" as const, spec: resolve(f.data, f.opts), span };
-  };
-  return {
-    title: "Sample dashboard",
-    columns: 3,
-    items: [
-      { type: "kpi", label: "Revenue", value: "$53.5K", delta: 0.12, caption: "vs last month" },
-      cell("bar-revenue-by-status"),
-      cell("pie-region"),
-      cell("line-monthly", 2),
-      cell("bar-long-labels"),
-    ] as DashboardSpec["items"],
-  };
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function toast(message: string) {
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), 1800);
 }
 
-// Left-panel entries. Chart fixtures feed data+opts through resolve(); the dashboard entry is a
-// prebuilt DashboardSpec (rendered raw in "spec" mode).
-interface Entry {
-  name: string;
-  kind: "fixture" | "dashboard";
-}
-const entries: Entry[] = [
-  ...fixtures.map((f): Entry => ({ name: f.name, kind: "fixture" })),
-  { name: "▸ dashboard sample", kind: "dashboard" },
-];
-
-function loadEntry(name: string) {
-  const entry = entries.find((e) => e.name === name);
-  if (!entry) return;
-  if (entry.kind === "dashboard") {
-    mode = "spec";
-    editor.value = JSON.stringify(dashboardSample(), null, 2);
-  } else {
-    const f = fixtures.find((x) => x.name === entry.name)!;
-    mode = "data";
-    editor.value = JSON.stringify({ data: f.data, opts: f.opts }, null, 2);
-  }
-  syncModeButtons();
-  render();
+function option(select: HTMLSelectElement, value: string, label: string) {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = label;
+  select.appendChild(opt);
 }
 
-// Parse the editor and produce the payload the widget expects (a ChartSpec or DashboardSpec).
-function currentPayload(): ChartSpec | DashboardSpec {
-  const parsed = JSON.parse(editor.value);
-  if (mode === "data") {
-    const { data, opts } = parsed as { data: ChartData; opts?: ResolveOptions };
-    return resolve(data, opts ?? {});
-  }
-  return parsed as ChartSpec | DashboardSpec;
-}
+option(typeSelect, "", "any chart type");
+for (const c of categories) if (c.id !== "dashboard") option(typeSelect, c.id, c.id);
+option(kindSelect, "", "any decision kind");
+for (const kind of [...decisionCounts().keys()].sort()) option(kindSelect, kind, kind);
 
-function render() {
-  try {
-    const payload = currentPayload();
-    errEl.textContent = "";
-    iframe.contentWindow?.postMessage({ type: "bonnard:harness-render", structuredContent: payload, theme }, "*");
-  } catch (e) {
-    errEl.textContent = e instanceof Error ? e.message : String(e);
-  }
-}
-
-function syncModeButtons() {
-  document
-    .querySelectorAll<HTMLButtonElement>("#mode button")
-    .forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
-}
-
-// Populate fixture picker
-for (const e of entries) {
-  const o = document.createElement("option");
-  o.value = e.name;
-  o.textContent = e.name;
-  fixtureSel.appendChild(o);
-}
-
-fixtureSel.addEventListener("change", () => loadEntry(fixtureSel.value));
-document.getElementById("render")!.addEventListener("click", render);
-
-// Re-render on edit (debounced), so tweaking the JSON updates the preview live.
-let t: ReturnType<typeof setTimeout>;
-editor.addEventListener("input", () => {
-  clearTimeout(t);
-  t = setTimeout(render, 250);
-});
-editor.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-    e.preventDefault();
-    render();
-  }
+const gallery = mountGallery(sidebar, grid, store, {
+  onOpen: (example) => overlay.open(example),
+  // The card's copy is the quick one: the fixture untouched, every audience, no hand edits, so a
+  // hand-off from the gallery cannot carry a state the recipient has no way to see.
+  onCopy: (example) => {
+    void copyText(
+      buildAiReport({
+        example,
+        payload: example.payload,
+        ...(example.fixture ? { input: { data: example.fixture.data, opts: example.fixture.opts } } : {}),
+        audience: "all",
+        activeAudiences: audiencesFor("all"),
+        theme: store.get().theme,
+        synth: null,
+        edited: false,
+      }),
+    ).then((ok) => toast(ok ? `Copied ${example.name}` : "Copy failed"));
+  },
 });
 
-document.querySelectorAll<HTMLButtonElement>("#mode button").forEach((b) =>
-  b.addEventListener("click", () => {
-    mode = b.dataset.mode as Mode;
-    syncModeButtons();
-    render();
-  }),
+const overlay = mountOverlay({
+  root: overlayRoot,
+  bridge,
+  store,
+  visible: () => gallery.visible(),
+  toast,
+});
+
+search.addEventListener("input", () => store.set({ query: search.value }));
+typeSelect.addEventListener("change", () =>
+  store.set({ filter: { ...store.get().filter, chartType: (typeSelect.value || undefined) as ChartType | undefined } }),
 );
-document.querySelectorAll<HTMLButtonElement>("#theme button").forEach((b) =>
-  b.addEventListener("click", () => {
-    theme = b.dataset.theme as Theme;
-    document
-      .querySelectorAll<HTMLButtonElement>("#theme button")
-      .forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.theme === theme)));
-    document.documentElement.dataset.theme = theme;
-    render();
-  }),
+kindSelect.addEventListener("change", () =>
+  store.set({ filter: { ...store.get().filter, kind: (kindSelect.value || undefined) as DecisionKind | undefined } }),
 );
+withDecisions.addEventListener("change", () =>
+  store.set({ filter: { ...store.get().filter, withDecisions: withDecisions.checked || undefined } }),
+);
+audienceSelect.addEventListener("change", () => store.set({ audience: audienceSelect.value as AudienceFilter }));
 
-// The widget iframe posts this after it (re)loads — including after a Vite full-reload triggered by
-// a renderer source edit. Re-feeding the current payload is what makes editing the renderer feel
-// like HMR: change spec-to-option.ts, the iframe reloads, and the same chart repaints instantly.
-window.addEventListener("message", (e) => {
-  if ((e.data as { type?: string } | null)?.type === "bonnard:harness-ready") render();
+document
+  .querySelectorAll<HTMLButtonElement>("#theme button")
+  .forEach((button) => button.addEventListener("click", () => store.set({ theme: button.dataset.theme as Theme })));
+
+// Our own writes use replaceState, which is silent, so anything that fires this came from outside:
+// a pasted link, an edited address bar, a bookmark. Apply it whole.
+window.addEventListener("hashchange", () => store.set(hashState()));
+
+/** Push the store back into the controls it does not own, so a hash-restored state looks restored. */
+function syncControls() {
+  const state = store.get();
+  if (search.value !== state.query) search.value = state.query;
+  typeSelect.value = state.filter.chartType ?? "";
+  kindSelect.value = state.filter.kind ?? "";
+  withDecisions.checked = !!state.filter.withDecisions;
+  audienceSelect.value = state.audience;
+  document.documentElement.dataset.theme = state.theme;
+  for (const button of document.querySelectorAll<HTMLButtonElement>("#theme button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.theme === state.theme));
+  }
+}
+
+store.subscribe((state, previous) => {
+  syncControls();
+  const listChanged =
+    state.category !== previous.category ||
+    state.query !== previous.query ||
+    state.filter !== previous.filter ||
+    // A theme change invalidates every cached thumbnail, so the grid has to be rebuilt.
+    state.theme !== previous.theme;
+  if (listChanged) gallery.refresh();
+  overlay.refresh();
 });
 
-loadEntry(entries[0]!.name);
+syncControls();
+gallery.refresh();
+// A hash naming an example that no longer exists must not leave a dead overlay open.
+if (store.get().selectedId && !byId.has(store.get().selectedId!)) {
+  store.set({ selectedId: null, overlayOpen: false, category: ALL_CATEGORY });
+}
+overlay.refresh();

@@ -1,11 +1,17 @@
 // Shared renderer fixtures: one source of truth for structural tests + visual PNGs + gallery.
 // Each is ChartData + resolve options, matching production (data -> resolve() -> render()).
-import type { ChartData, ResolveOptions } from "@bonnard/mcp-charts";
+import type { ChartData, DecisionKind, ResolveOptions, TimeGranularity } from "@bonnard/mcp-charts";
 
 export interface Fixture {
   name: string;
   data: ChartData;
   opts: ResolveOptions;
+  /** Decision kinds this fixture exists to trigger. The harness gallery chips and the catalog
+   *  coverage test both read this, so a kind gains a worked example the moment it gains a label. */
+  demonstrates?: DecisionKind[];
+  /** Declared render expectations. `blank` marks a fixture that draws no marks BY DESIGN (nothing
+   *  to plot), so the UAT gate asserts the absence instead of failing on it. */
+  expect?: { blank?: true };
 }
 
 const cur = (name: string) => ({
@@ -15,6 +21,23 @@ const cur = (name: string) => ({
   format: "currency" as const,
   currency: "USD",
 });
+
+const dim = (name: string) => ({ name, role: "dimension" as const, kind: "string" as const });
+const num = (name: string) => ({ name, role: "measure" as const, kind: "number" as const });
+const pct = (name: string) => ({ ...num(name), format: "percent" as const });
+const when = (name: string, granularity: TimeGranularity) => ({
+  name,
+  role: "time" as const,
+  kind: "time" as const,
+  granularity,
+});
+
+// Generated fixture data must be byte-identical on every run (it feeds the UAT gate and the
+// structural tests), so shapes come from index arithmetic, never Math.random.
+const DAY_MS = 86_400_000;
+const isoDay = (i: number, from = Date.UTC(2024, 0, 1)) => new Date(from + i * DAY_MS).toISOString().slice(0, 10);
+const isoMonth = (i: number, year = 2025) => `${year + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`;
+const wave = (i: number, amplitude: number, period: number) => Math.round(Math.sin(i / period) * amplitude);
 
 export const fixtures: Fixture[] = [
   {
@@ -239,6 +262,7 @@ export const fixtures: Fixture[] = [
   },
   {
     name: "pie-two-measures",
+    demonstrates: ["forced_type_mismatch"],
     opts: { chartType: "pie", title: "Pie With Two Measures" },
     data: {
       rows: [
@@ -272,6 +296,7 @@ export const fixtures: Fixture[] = [
   },
   {
     name: "pie-high-cardinality",
+    demonstrates: ["pie_fold"],
     opts: { chartType: "pie", title: "Revenue Share (many small slices)" },
     data: {
       rows: [
@@ -380,6 +405,7 @@ export const fixtures: Fixture[] = [
   },
   {
     name: "waterfall-arr-bridge",
+    demonstrates: ["waterfall_totals_guess"],
     opts: { chartType: "waterfall", title: "ARR movement" },
     data: {
       rows: [
@@ -391,6 +417,339 @@ export const fixtures: Fixture[] = [
         { step: "Closing ARR", amount: 2070000 },
       ],
       fields: [{ name: "step", role: "dimension", kind: "string" }, cur("amount")],
+    },
+  },
+  {
+    // Decisions demo: 40 categories trips MAX_BARS (30) -> a "bar_cap" decision
+    // (audiences: viewer, agent). Pick this fixture in the harness to see the viewer-facing
+    // truncation caption render under the chart.
+    name: "decisions-bar-cap-40-categories",
+    demonstrates: ["bar_cap"],
+    opts: { chartType: "bar", title: "Revenue by SKU (40 SKUs)" },
+    data: {
+      rows: Array.from({ length: 40 }, (_, i) => ({
+        sku: `SKU-${String(i + 1).padStart(3, "0")}`,
+        revenue: 40000 - i * 900 + (i % 3) * 150,
+      })),
+      fields: [{ name: "sku", role: "dimension", kind: "string" }, cur("revenue")],
+    },
+  },
+  {
+    // Decisions demo: `encode.x` names a column the data doesn't have -> an "encode_unknown_column"
+    // decision (audience: author only). The harness shows all audiences, so the caption still
+    // appears here; the point is that a published/embedded viewer surface (audiences=viewer) would
+    // hide it, since this is an authoring mistake, not something to caption for an end viewer.
+    name: "decisions-encode-mistake",
+    demonstrates: ["encode_unknown_column"],
+    opts: { chartType: "bar", title: "Revenue by Region (typo'd encode)" },
+    data: {
+      encode: { x: "regoin" },
+      rows: [
+        { region: "EU", revenue: 29300 },
+        { region: "US", revenue: 23000 },
+        { region: "APAC", revenue: 850 },
+      ],
+      fields: [{ name: "region", role: "dimension", kind: "string" }, cur("revenue")],
+    },
+  },
+
+  // --- Realistic density -------------------------------------------------------------------
+  // The short fixtures above are legitimate degenerate cases, but a renderer tuned only against
+  // three bars hides label collision, axis crowding and legend wrap. These carry production-shaped
+  // row counts and trigger no decisions.
+  {
+    name: "line-daily-90d",
+    opts: { chartType: "line", title: "Daily active users (90 days)" },
+    data: {
+      rows: Array.from({ length: 90 }, (_, i) => ({
+        day: isoDay(i),
+        active_users: 8400 + wave(i, 900, 11) + wave(i, 340, 3) + i * 12,
+      })),
+      fields: [when("day", "day"), num("active_users")],
+    },
+  },
+  {
+    name: "bar-skus-24",
+    opts: { chartType: "bar", title: "Revenue by SKU (24 SKUs)" },
+    data: {
+      rows: Array.from({ length: 24 }, (_, i) => ({
+        sku: `SKU-${String(i + 1).padStart(3, "0")}`,
+        revenue: 31000 - i * 1100 + wave(i, 1400, 4),
+      })),
+      fields: [dim("sku"), cur("revenue")],
+    },
+  },
+  {
+    name: "table-orders-200",
+    opts: { chartType: "table", title: "Orders (200 rows)" },
+    data: {
+      rows: Array.from({ length: 200 }, (_, i) => ({
+        order_id: `o_${2000 + i}`,
+        placed_on: isoDay(i % 90),
+        customer: ["Hooli", "Umbrella Health", "Northwind Trading", "Initech", "Globex"][i % 5]!,
+        status: ["shipped", "open", "cancelled"][i % 3]!,
+        amount: 420 + ((i * 137) % 4800),
+      })),
+      fields: [dim("order_id"), when("placed_on", "day"), dim("customer"), dim("status"), cur("amount")],
+    },
+  },
+  {
+    name: "area-stacked-12m-4-plans",
+    opts: { chartType: "area", stacking: "stacked", title: "Revenue by plan (12 months)" },
+    data: {
+      rows: ["enterprise", "pro", "team", "free"].flatMap((plan, p) =>
+        Array.from({ length: 12 }, (_, m) => ({
+          month: isoMonth(m),
+          plan,
+          revenue: [24000, 12000, 6400, 900][p]! + wave(m + p * 3, [3800, 2100, 1200, 260][p]!, 4) + m * (140 - p * 30),
+        })),
+      ),
+      fields: [when("month", "month"), dim("plan"), cur("revenue")],
+    },
+  },
+
+  // --- Decision coverage -------------------------------------------------------------------
+  // One fixture per DecisionKind resolve() can reach, each labelled with what it triggers. The
+  // harness catalog test fails if a kind loses its worked example.
+  {
+    name: "decisions-downsample-line-3000",
+    demonstrates: ["downsample"],
+    opts: { chartType: "line", title: "Sessions per day (3,000 days)" },
+    data: {
+      rows: Array.from({ length: 3000 }, (_, i) => ({
+        day: isoDay(i),
+        sessions: 4200 + wave(i, 900, 30) + wave(i, 220, 7) + Math.round(i * 0.4),
+      })),
+      fields: [when("day", "day"), num("sessions")],
+    },
+  },
+  {
+    name: "decisions-scatter-sample-3000",
+    demonstrates: ["scatter_sample"],
+    opts: { chartType: "scatter", title: "Sessions vs revenue (3,000 accounts)" },
+    data: {
+      rows: Array.from({ length: 3000 }, (_, i) => {
+        const sessions = 20 + ((i * 37) % 480);
+        return { sessions, revenue: 300 + sessions * 42 + wave(i, 2600, 1) };
+      }),
+      fields: [num("sessions"), cur("revenue")],
+    },
+  },
+  {
+    name: "decisions-series-fold-16-plans",
+    demonstrates: ["series_fold"],
+    opts: { chartType: "line", title: "Revenue by plan (16 plans)" },
+    data: {
+      rows: Array.from({ length: 16 }, (_, p) => `plan-${String(p + 1).padStart(2, "0")}`).flatMap((plan, p) =>
+        Array.from({ length: 8 }, (_, m) => ({
+          month: isoMonth(m),
+          plan,
+          revenue: 26000 - p * 1500 + wave(m + p, 1800, 3),
+        })),
+      ),
+      fields: [when("month", "month"), dim("plan"), cur("revenue")],
+    },
+  },
+  {
+    name: "decisions-scatter-groups-20",
+    demonstrates: ["series_fold"],
+    opts: { chartType: "scatter", title: "Accounts by industry (20 industries)" },
+    data: {
+      encode: { x: "sessions", y: "revenue", series: "industry" },
+      rows: Array.from({ length: 20 }, (_, g) => `industry-${String(g + 1).padStart(2, "0")}`).flatMap((industry, g) =>
+        Array.from({ length: 4 }, (_, i) => {
+          const sessions = 40 + g * 18 + i * 25;
+          return { industry, sessions, revenue: 1200 + sessions * (30 + g) + wave(g * 4 + i, 3000, 2) };
+        }),
+      ),
+      fields: [dim("industry"), num("sessions"), cur("revenue")],
+    },
+  },
+  {
+    name: "decisions-loose-dates",
+    demonstrates: ["loose_dates"],
+    opts: { chartType: "bar", title: "Revenue by week (US-format dates)" },
+    data: {
+      rows: [
+        { week: "01/05/2026", revenue: 18200 },
+        { week: "01/12/2026", revenue: 21400 },
+        { week: "01/19/2026", revenue: 16900 },
+        { week: "01/26/2026", revenue: 23800 },
+      ],
+      fields: [dim("week"), cur("revenue")],
+    },
+  },
+  {
+    name: "decisions-dedupe-sum",
+    demonstrates: ["dedupe_sum"],
+    opts: { chartType: "bar", title: "Amount by status (unaggregated rows)" },
+    data: {
+      rows: [
+        { status: "shipped", amount: 4200 },
+        { status: "shipped", amount: 1800 },
+        { status: "shipped", amount: 2650 },
+        { status: "open", amount: 900 },
+        { status: "open", amount: 640 },
+        { status: "cancelled", amount: 320 },
+      ],
+      fields: [dim("status"), cur("amount")],
+    },
+  },
+  {
+    name: "decisions-rate-sum-hazard",
+    demonstrates: ["dedupe_sum", "rate_sum_hazard"],
+    opts: { chartType: "bar", title: "Conversion rate by channel (unaggregated rows)" },
+    data: {
+      rows: [
+        { channel: "web", conversion_rate: 0.12 },
+        { channel: "web", conversion_rate: 0.09 },
+        { channel: "mobile", conversion_rate: 0.07 },
+        { channel: "mobile", conversion_rate: 0.11 },
+        { channel: "partner", conversion_rate: 0.18 },
+      ],
+      fields: [dim("channel"), pct("conversion_rate")],
+    },
+  },
+  {
+    name: "decisions-y2-dropped-on-pivot",
+    demonstrates: ["y2_dropped_on_pivot"],
+    opts: { chartType: "bar", title: "Revenue by plan, margin asked for a second axis" },
+    data: {
+      encode: { y2: "margin_pct" },
+      rows: ["enterprise", "pro", "team"].flatMap((plan, p) =>
+        Array.from({ length: 6 }, (_, m) => ({
+          month: isoMonth(m),
+          plan,
+          revenue: 22000 - p * 6400 + wave(m + p, 2200, 3),
+          margin_pct: 0.44 - p * 0.07 + m * 0.004,
+        })),
+      ),
+      fields: [when("month", "month"), dim("plan"), cur("revenue"), pct("margin_pct")],
+    },
+  },
+  {
+    name: "decisions-no-measure",
+    demonstrates: ["no_measure"],
+    expect: { blank: true },
+    opts: { chartType: "bar", title: "Accounts by owner (no numeric column)" },
+    data: {
+      rows: [
+        { owner: "Dana Whitfield", account: "Hooli" },
+        { owner: "Sam Okafor", account: "Umbrella Health" },
+        { owner: "Priya Raman", account: "Northwind Trading" },
+        { owner: "Leo Marchetti", account: "Initech" },
+      ],
+      fields: [dim("owner"), dim("account")],
+    },
+  },
+  {
+    name: "decisions-line-over-categories",
+    demonstrates: ["forced_type_mismatch"],
+    opts: { chartType: "line", title: "Revenue by region (a line over categories)" },
+    data: {
+      rows: [
+        { region: "EU", revenue: 29300 },
+        { region: "US", revenue: 23000 },
+        { region: "APAC", revenue: 12400 },
+        { region: "LATAM", revenue: 6100 },
+        { region: "MEA", revenue: 3850 },
+      ],
+      fields: [dim("region"), cur("revenue")],
+    },
+  },
+  {
+    name: "decisions-funnel-numeric-stages",
+    demonstrates: ["forced_type_mismatch"],
+    opts: { chartType: "funnel", title: "Funnel over numeric stage ids" },
+    data: {
+      rows: [
+        { stage_id: 1, users: 12000 },
+        { stage_id: 2, users: 4200 },
+        { stage_id: 3, users: 2100 },
+        { stage_id: 4, users: 760 },
+      ],
+      fields: [num("stage_id"), num("users")],
+    },
+  },
+  {
+    name: "decisions-pie-all-negative",
+    demonstrates: ["pie_negative_magnitudes"],
+    opts: { chartType: "pie", title: "Churned ARR by reason (all negative)" },
+    data: {
+      rows: [
+        { reason: "Downgrade", net: -42000 },
+        { reason: "Cancellation", net: -31500 },
+        { reason: "Contraction", net: -18400 },
+        { reason: "Non-renewal", net: -9800 },
+      ],
+      fields: [dim("reason"), cur("net")],
+    },
+  },
+  {
+    // No `fields` entry for revenue: a declared kind suppresses the advisory, so the column has to
+    // arrive untyped for the coercion to be worth reporting.
+    name: "decisions-coerced-numeric-strings",
+    demonstrates: ["coerced_numeric_strings"],
+    opts: { chartType: "bar", title: "Revenue by status (numbers arrived as strings)" },
+    data: {
+      rows: [
+        { status: "shipped", revenue: "43700" },
+        { status: "open", revenue: "8400" },
+        { status: "cancelled", revenue: "1450" },
+      ],
+      fields: [dim("status")],
+    },
+  },
+  {
+    // `raw_amount` sits after the plotted columns in row-key order, so it is carried but never
+    // becomes x or a series - which is the case the advisory is for (a wrapper the chart tolerates).
+    name: "decisions-driver-wrapped-values",
+    demonstrates: ["driver_wrapped_values"],
+    opts: { chartType: "bar", title: "Revenue by region (a driver-wrapped extra column)" },
+    data: {
+      rows: [
+        { region: "EU", revenue: 29300, raw_amount: { value: 29300 } },
+        { region: "US", revenue: 23000, raw_amount: { value: 23000 } },
+        { region: "APAC", revenue: 12400, raw_amount: { value: 12400 } },
+      ],
+      fields: [dim("region"), cur("revenue")],
+    },
+  },
+  {
+    // Agent-only audience: nothing captions until the harness audience toggle leaves "viewer".
+    name: "decisions-result-truncated",
+    demonstrates: ["result_truncated"],
+    opts: { chartType: "bar", title: "Revenue by account (partial result)" },
+    data: {
+      decisions: [
+        {
+          kind: "result_truncated",
+          audiences: ["agent"],
+          message: "Result truncated at the 10,000-row cap; the totals below are partial.",
+          data: { cap: 10000 },
+        },
+      ],
+      rows: [
+        { account: "Hooli", revenue: 164000 },
+        { account: "Umbrella Health", revenue: 142000 },
+        { account: "Northwind Trading", revenue: 112000 },
+        { account: "Initech", revenue: 38000 },
+      ],
+      fields: [dim("account"), cur("revenue")],
+    },
+  },
+  {
+    name: "decisions-consumer-note",
+    demonstrates: ["consumer_note"],
+    opts: { chartType: "bar", title: "Revenue by region (with a passed-through note)" },
+    data: {
+      notes: ["Figures are illustrative and exclude intercompany revenue."],
+      rows: [
+        { region: "EU", revenue: 29300 },
+        { region: "US", revenue: 23000 },
+        { region: "APAC", revenue: 12400 },
+      ],
+      fields: [dim("region"), cur("revenue")],
     },
   },
 ];

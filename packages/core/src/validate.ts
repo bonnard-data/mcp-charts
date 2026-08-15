@@ -3,7 +3,8 @@
 // chart renderer below us fails SILENTLY on a bad shape, we turn "invisible blank chart" into
 // a clear, agent-correctable error. Cheap: structural check + sampled scalar check on the
 // columns we actually plot. Never scans large result sets; never rejects carried-but-unplotted columns.
-import type { ChartData, ChartSpec } from "./types.js";
+import type { ChartData, ChartSpec, Decision } from "./types.js";
+import { decision } from "./resolve/decisions.js";
 
 const SCALAR_TYPES = new Set(["string", "number", "boolean", "bigint"]);
 const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
@@ -59,25 +60,43 @@ export function validateRowsShape(rows: unknown): asserts rows is Record<string,
 // categories, or blanks the chart on objects. This is a wiring mistake in the caller's runSql (a
 // SQL driver that string-encodes numerics, or hands back Date/wrapper objects), not bad data, so it
 // warns the developer rather than throwing. Silent when the caller declared `fields` (kinds win).
-export function warnUntypedColumns(data: ChartData, sample = 50): string[] {
+export function untypedColumnDecisions(data: ChartData, sample = 50): Decision[] {
   const declared = new Set((data.fields ?? []).filter((f) => f.kind).map((f) => f.name));
   const rows = data.rows.slice(0, sample);
   const cols = rows[0] ? Object.keys(rows[0]) : [];
-  const out: string[] = [];
+  const out: Decision[] = [];
   for (const c of cols) {
     if (declared.has(c)) continue;
     const vals = rows.map((r) => r[c]).filter((v) => v != null);
     if (vals.length === 0) continue;
     // Skip all-4-digit columns: a bare year is a legitimate string/number ambiguity we must not force.
     if (allNumericStrings(vals)) {
-      out.push(
-        `Column "${c}" arrived as numbers stored as strings; coerced to numbers so it can be plotted. Declare its kind or return numbers to silence this.`,
-      );
+      out.push(decision("coerced_numeric_strings", { column: c }));
     } else if (vals.some((v) => typeof v === "object" && !(v instanceof Date))) {
-      out.push(`Column "${c}" holds objects (a driver-wrapped value?); normalize to a scalar or declare its fields.`);
+      out.push(decision("driver_wrapped_values", { column: c }));
     }
   }
   return out;
+}
+
+/** The messages of untypedColumnDecisions. */
+export function warnUntypedColumns(data: ChartData, sample = 50): string[] {
+  return untypedColumnDecisions(data, sample).map((d) => d.message);
+}
+
+/** Merge the integrator advisories for `data` into `spec`, deduped by message. These are
+ *  "recovered" signals (the chart still renders), so they ride the spec rather than throwing. */
+export function mergeAdvisories(spec: ChartSpec, data: ChartData): ChartSpec {
+  const advisories = untypedColumnDecisions(data);
+  if (advisories.length === 0) return spec;
+  const decisions = [...(spec.decisions ?? [])];
+  const seen = new Set(decisions.map((d) => d.message));
+  for (const a of advisories) {
+    if (seen.has(a.message)) continue;
+    seen.add(a.message);
+    decisions.push(a);
+  }
+  return { ...spec, notes: decisions.map((d) => d.message), decisions };
 }
 
 /** Precise check: every column we actually plot (x + series) must hold scalar values. Sampled. */

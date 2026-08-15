@@ -11,6 +11,7 @@ import type {
   ChartSpec,
   DashboardItem,
   DashboardSpec,
+  Decision,
   FieldKind,
   KpiTile,
   ResolveOptions,
@@ -24,6 +25,9 @@ export interface ChartCellInput {
   columns: SourceColumn[];
   opts: ResolveOptions;
   span?: number;
+  /** The cell failed to build. Not something resolve() decides — a hard failure the renderer shows
+   *  whatever the audience filter is. */
+  error?: string;
 }
 
 /** A dashboard-item input: either a chart to be built, or a final KPI/text item. */
@@ -35,6 +39,8 @@ export interface DashboardFixtureInputs {
   columns?: number;
   items: DashboardItemInput[];
   notes?: string[];
+  /** Dashboard-level decisions, carried through the same way `notes` is. */
+  decisions?: Decision[];
 }
 
 export interface DashboardFixture {
@@ -66,7 +72,11 @@ function isChartInput(input: DashboardItemInput): input is ChartCellInput {
 
 function toItem(input: DashboardItemInput): DashboardItem {
   if (isChartInput(input)) {
-    return input.span != null ? { spec: buildCellSpec(input), span: input.span } : { spec: buildCellSpec(input) };
+    return {
+      spec: buildCellSpec(input),
+      ...(input.span != null && { span: input.span }),
+      ...(input.error != null && { error: input.error }),
+    };
   }
   return input;
 }
@@ -76,6 +86,7 @@ function toSpec(inputs: DashboardFixtureInputs): DashboardSpec {
   if (inputs.title != null) spec.title = inputs.title;
   if (inputs.columns != null) spec.columns = inputs.columns;
   if (inputs.notes != null) spec.notes = inputs.notes;
+  if (inputs.decisions != null) spec.decisions = inputs.decisions;
   return spec;
 }
 
@@ -142,6 +153,39 @@ const barRegion = chart(
 // emptyResult table shape for a cell that returned no rows).
 const emptyTable = chart([], [col("label", "string"), col("value", "number")], { chartType: "table" });
 
+// --- Chart cells that make resolve() decide something ---
+// One cell per audience, so a surface's audience filter has all three to sort through.
+
+// viewer: 40 categories over the 30-bar cap.
+const barCapped = chart(
+  Array.from({ length: 40 }, (_, i) => ({ sku: `SKU-${String(i + 1).padStart(3, "0")}`, revenue: 40000 - i * 900 })),
+  [col("sku", "string"), col("revenue", "number")],
+  { chartType: "bar", title: "Revenue by SKU" },
+);
+
+// author: non-ISO dates, plotted as unordered categories.
+const barLooseDates = chart(
+  [
+    { week: "01/05/2026", revenue: 18200 },
+    { week: "01/12/2026", revenue: 21400 },
+    { week: "01/19/2026", revenue: 16900 },
+  ],
+  [col("week", "string"), col("revenue", "number")],
+  { chartType: "bar", title: "Revenue by Week" },
+);
+
+// agent: unaggregated rows, summed on the way in.
+const barUnaggregated = chart(
+  [
+    { status: "shipped", amount: 4200 },
+    { status: "shipped", amount: 1800 },
+    { status: "open", amount: 900 },
+    { status: "open", amount: 640 },
+  ],
+  [col("status", "string"), col("amount", "number")],
+  { chartType: "bar", title: "Amount by Status" },
+);
+
 // --- KPI + text item inputs ---
 
 const kpiCurrency: KpiTile = {
@@ -184,7 +228,7 @@ const textIntro: TextBlock = {
   span: 2,
 };
 
-// --- The six fixtures ---
+// --- The fixtures ---
 
 export const dashboardFixtures: DashboardFixture[] = [
   {
@@ -216,6 +260,43 @@ export const dashboardFixtures: DashboardFixture[] = [
     // (renders a placeholder, not "null").
     name: "degenerate",
     ...pack({ columns: 2, items: [emptyTable, kpiNull] }),
+  },
+  {
+    // One grid whose cells are addressed to different audiences, so a surface that narrows its
+    // audiences visibly keeps some captions and drops others.
+    name: "decisions-audiences",
+    ...pack({
+      title: "What resolve() decided",
+      columns: 3,
+      items: [barCapped, barLooseDates, barUnaggregated],
+    }),
+  },
+  {
+    // Hard failures next to advisories: a cell and a tile that never produced a value (rendered
+    // whatever the audience filter is), plus dashboard-level decisions for each audience.
+    name: "decisions-errors",
+    ...pack({
+      title: "Failures and advisories",
+      columns: 2,
+      items: [
+        { ...pieRegion, error: "warehouse connection lost mid-render" },
+        { ...kpiNull, error: "query timed out after 30s" },
+        barRevenueByStatus,
+      ],
+      decisions: [
+        {
+          kind: "item_error",
+          audiences: ["agent"],
+          message: "1 of 3 items failed to build; the dashboard is incomplete.",
+          data: { failed: 1, total: 3 },
+        },
+        {
+          kind: "consumer_note",
+          audiences: ["viewer", "agent"],
+          message: "Figures are illustrative and exclude intercompany revenue.",
+        },
+      ],
+    }),
   },
 ];
 

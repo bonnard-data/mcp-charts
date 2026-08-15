@@ -6,12 +6,17 @@
     <title>Bonnard widget dev harness</title>
     <style>
       :root {
-        --bg: #fafafa;
+        --bg: #f6f7f9;
         --panel: #ffffff;
         --fg: #1a1a1a;
         --muted: #6b7280;
         --border: #e5e7eb;
         --accent: #2563eb;
+        --danger: #dc2626;
+        --viewer: #0ea5e9;
+        --author: #f59e0b;
+        --agent: #8b5cf6;
+        --multi: #64748b;
         font-family:
           ui-sans-serif,
           system-ui,
@@ -20,85 +25,65 @@
           Roboto,
           sans-serif;
       }
+      html[data-theme="dark"] {
+        --bg: #101012;
+        --panel: #18181b;
+        --fg: #fafafa;
+        --muted: #9ca3af;
+        --border: #2a2a2e;
+      }
       * {
         box-sizing: border-box;
       }
+      [hidden] {
+        display: none !important;
+      }
       body {
         margin: 0;
-        height: 100vh;
+        min-height: 100vh;
         display: grid;
-        grid-template-columns: 380px 1fr;
+        grid-template-columns: 220px 1fr;
         background: var(--bg);
         color: var(--fg);
-      }
-      .panel {
-        border-right: 1px solid var(--border);
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        overflow: auto;
-      }
-      .panel h1 {
-        font-size: 14px;
-        margin: 0;
-        font-weight: 700;
-      }
-      .panel .sub {
-        font-size: 11px;
-        color: var(--muted);
-        margin: -6px 0 4px;
-      }
-      .row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      label {
-        font-size: 11px;
-        color: var(--muted);
-        font-weight: 600;
-      }
-      select,
-      button {
-        font: inherit;
         font-size: 13px;
-        padding: 5px 8px;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+        color: var(--fg);
+        background: var(--panel);
         border: 1px solid var(--border);
         border-radius: 6px;
-        background: var(--panel);
-        color: var(--fg);
+        padding: 5px 9px;
       }
       button {
         cursor: pointer;
       }
+      button[disabled] {
+        opacity: 0.45;
+        cursor: default;
+      }
       button.primary {
         background: var(--accent);
-        color: #fff;
         border-color: var(--accent);
+        color: #fff;
       }
-      select {
-        flex: 1;
+      h3 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 0 0 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
       }
-      textarea {
-        flex: 1;
-        min-height: 240px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      .muted {
+        color: var(--muted);
         font-size: 12px;
-        line-height: 1.45;
-        padding: 8px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--panel);
-        color: var(--fg);
-        resize: vertical;
-        tab-size: 2;
-      }
-      .err {
-        color: #dc2626;
-        font-size: 12px;
-        white-space: pre-wrap;
-        min-height: 16px;
+        margin: 6px 0 0;
       }
       .seg {
         display: inline-flex;
@@ -106,61 +91,448 @@
         border-radius: 6px;
         overflow: hidden;
       }
+      .seg.wide {
+        display: flex;
+      }
+      .seg.wide button {
+        flex: 1;
+      }
       .seg button {
         border: 0;
         border-radius: 0;
+        border-right: 1px solid var(--border);
+      }
+      .seg button:last-child {
+        border-right: 0;
       }
       .seg button[aria-pressed="true"] {
         background: var(--accent);
         color: #fff;
       }
-      .stage {
-        position: relative;
+      .seg.small button {
+        padding: 2px 7px;
+        font-size: 11px;
       }
-      iframe {
+
+      /* --- sidebar --- */
+      #sidebar {
+        border-right: 1px solid var(--border);
+        background: var(--panel);
+        padding: 14px 10px;
+        overflow: auto;
+        max-height: 100vh;
+        position: sticky;
+        top: 0;
+      }
+      .brand {
+        font-weight: 700;
+        font-size: 13px;
+        padding: 0 6px 10px;
+      }
+      .nav-title {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        padding: 14px 6px 6px;
+      }
+      .nav-group {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      button.nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        padding: 4px 6px;
+        border-radius: 5px;
+      }
+      button.nav:hover {
+        background: var(--bg);
+      }
+      button.nav[aria-pressed="true"] {
+        background: var(--accent);
+        color: #fff;
+      }
+      button.nav.kind {
+        font-size: 11px;
+      }
+      .count {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      button.nav[aria-pressed="true"] .count {
+        color: #dbeafe;
+      }
+
+      /* --- filter bar --- */
+      #filters {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+      }
+      #filters .grow {
+        flex: 1;
+        min-width: 180px;
+      }
+      #filters label {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      /* --- gallery --- */
+      #grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        padding: 16px;
+        align-items: start;
+      }
+      @media (max-width: 1180px) {
+        #grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 780px) {
+        #grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .card {
+        position: relative;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .card:hover,
+      .card:focus-visible {
+        border-color: var(--accent);
+        outline: none;
+      }
+      .thumb {
+        height: 200px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 1px solid var(--border);
+      }
+      .thumb svg {
+        max-width: 100%;
+        height: auto;
+      }
+      .thumb .title {
+        display: none;
+      }
+      .thumb.dashboard {
+        align-items: stretch;
+        padding: 6px;
+      }
+      .thumb-failed {
+        color: var(--danger);
+        font-size: 11px;
+        padding: 8px;
+      }
+      .card-body {
+        padding: 8px 10px 10px;
+      }
+      .card-name {
+        font-weight: 600;
+        font-size: 12px;
+        margin-bottom: 6px;
+        word-break: break-word;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .chip {
+        font-size: 10px;
+        border-radius: 999px;
+        padding: 1px 7px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .chip.decision {
+        border-color: transparent;
+        color: #fff;
+      }
+      .chip.viewer {
+        background: var(--viewer);
+      }
+      .chip.author {
+        background: var(--author);
+      }
+      .chip.agent {
+        background: var(--agent);
+      }
+      .chip.multi {
+        background: var(--multi);
+      }
+      .chip.error {
+        background: var(--danger);
+        border-color: transparent;
+        color: #fff;
+      }
+      .chip.synthetic {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .card-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: none;
+        gap: 6px;
+      }
+      .card:hover .card-actions,
+      .card:focus-within .card-actions {
+        display: flex;
+      }
+      .empty-gallery {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        padding: 40px 0;
+        text-align: center;
+      }
+
+      /* Dashboard thumbnails reuse the widget's shell markup, so a minimal grid is all it needs. */
+      .thumb .grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+        gap: 4px;
+        width: 100%;
+      }
+      .thumb .cell {
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 3px;
+        overflow: hidden;
+        min-height: 0;
+      }
+      .thumb .cell[data-span="2"] {
+        grid-column: span 2;
+      }
+      .thumb .cell[data-span="3"] {
+        grid-column: span 3;
+      }
+      .thumb .dash-title,
+      .thumb .cell-notes,
+      .thumb .dash-notes,
+      .thumb .kpi-caption {
+        font-size: 8px;
+        color: var(--muted);
+      }
+      .thumb .kpi-value {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .thumb .kpi-label {
+        font-size: 8px;
+        color: var(--muted);
+      }
+      .thumb .cell-error {
+        font-size: 8px;
+        color: var(--danger);
+      }
+
+      /* --- overlay --- */
+      #overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: var(--bg);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+      .ov-header {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .ov-title h2 {
+        margin: 0 0 6px;
+        font-size: 15px;
+      }
+      .ov-nav {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex: none;
+      }
+      .ov-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 420px;
+        min-height: 0;
+      }
+      .ov-stage {
+        min-width: 0;
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+      }
+      .ov-stage iframe {
         width: 100%;
         height: 100%;
         border: 0;
-        background: #fff;
+        background: transparent;
       }
-      html[data-theme="dark"] .stage {
-        background: #171717;
+      .ov-inspector {
+        overflow: auto;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      table.decisions {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      table.decisions th {
+        text-align: left;
+        color: var(--muted);
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+        padding: 3px 4px;
+      }
+      table.decisions td {
+        padding: 4px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      table.decisions tr.dimmed {
+        opacity: 0.4;
+      }
+      ul.errors {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--danger);
+        font-size: 12px;
+      }
+      .json textarea,
+      [data-json] textarea {
+        width: 100%;
+        min-height: 260px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        line-height: 1.45;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        resize: vertical;
+        tab-size: 2;
+      }
+      .json-error {
+        color: var(--danger);
+        font-size: 11px;
+        min-height: 14px;
+        white-space: pre-wrap;
+      }
+      .ov-footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .ov-footer .label {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .ov-footer .spacer {
+        flex: 1;
+      }
+      [data-note] {
+        min-width: 200px;
+        flex: 1;
+      }
+      #toast {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        background: var(--fg);
+        color: var(--bg);
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 12px;
       }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <h1>Bonnard widget dev harness</h1>
-      <div class="sub">Edits to the widget or core <code>resolve()</code> source hot-reload the preview.</div>
-
-      <div class="row">
-        <label>Mode</label>
-        <div class="seg" id="mode">
-          <button data-mode="data" aria-pressed="true">data + opts → resolve()</button>
-          <button data-mode="spec">raw spec</button>
-        </div>
-      </div>
-
-      <div class="row">
-        <label for="fixture">Example</label>
-        <select id="fixture"></select>
-      </div>
-
-      <div class="row">
-        <label>Theme</label>
+    <aside id="sidebar"></aside>
+    <main id="main">
+      <header id="filters">
+        <input class="grow" id="q" type="search" placeholder="Search examples, decisions, messages" />
+        <select id="f-type"></select>
+        <select id="f-kind"></select>
+        <label><input type="checkbox" id="f-dec" /> has decisions</label>
+        <label
+          >audience
+          <select id="f-aud">
+            <option value="all">all</option>
+            <option value="viewer">viewer</option>
+            <option value="author">author</option>
+            <option value="agent">agent</option>
+          </select>
+        </label>
         <div class="seg" id="theme">
           <button data-theme="light" aria-pressed="true">light</button>
           <button data-theme="dark">dark</button>
         </div>
-        <button class="primary" id="render">Render ⌘⏎</button>
-      </div>
+      </header>
+      <div id="grid"></div>
+    </main>
 
-      <textarea id="editor" spellcheck="false"></textarea>
-      <div class="err" id="err"></div>
+    <div id="overlay" hidden>
+      <div class="ov-header" data-header></div>
+      <div class="ov-body">
+        <div class="ov-stage" data-stage><iframe id="stage" src="./index.html#harness"></iframe></div>
+        <div class="ov-inspector">
+          <section data-audience-bar></section>
+          <section data-decisions></section>
+          <section data-errors></section>
+          <section data-json></section>
+        </div>
+      </div>
+      <div class="ov-footer">
+        <div class="ov-footer" data-density style="border: 0; padding: 0; background: transparent"></div>
+        <span class="spacer"></span>
+        <input data-note type="text" placeholder="What looks wrong? (added to the AI report)" />
+        <button data-action="copy-json">Copy JSON</button>
+        <button data-action="copy-ai" class="primary">Copy for AI</button>
+      </div>
     </div>
-    <div class="stage">
-      <iframe id="stage" src="./index.html#harness"></iframe>
-    </div>
+
+    <div id="toast" hidden></div>
     <script type="module" src="./harness.ts"></script>
   </body>
 </html>

@@ -4,6 +4,8 @@
 //
 // Kept separate from main.ts so the mode is parse-time knowable (no flash of host-surface CSS) and
 // so everything here is inert when the fragment is absent.
+import type { DecisionAudience } from "@bonnard/mcp-charts";
+import { ALL_AUDIENCES } from "./decisions.js";
 
 /** Public presentation flags carried on the `#embed` fragment. */
 export interface EmbedConfig {
@@ -11,8 +13,8 @@ export interface EmbedConfig {
   titled: boolean;
   /** Initial theme. A later `bonnard:render` theme becomes a persistent override. */
   theme?: "light" | "dark";
-  /** Render per-cell guardrail advisories (`.cell-notes` / `.dash-notes`). Default true. */
-  notes: boolean;
+  /** Whose decisions render as captions (`.cell-notes` / `.dash-notes`). Default `["viewer"]`. */
+  audiences: DecisionAudience[];
 }
 
 /**
@@ -161,7 +163,7 @@ export function isValidFontFamily(value: string): boolean {
 /**
  * Parse the URL fragment. Returns null unless it starts with `embed` (so `#harness` and the
  * fragment-less MCP resource path are untouched). Flags follow as a query string:
- * `#embed&titled=true&theme=dark&notes=false`.
+ * `#embed&titled=true&theme=dark&audiences=viewer,author`.
  */
 export function parseEmbedFragment(hash: string): EmbedConfig | null {
   const raw = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -171,8 +173,29 @@ export function parseEmbedFragment(hash: string): EmbedConfig | null {
   return {
     titled: params.has("titled") ? isTruthyFlag(params.get("titled")) : false,
     theme: theme === "light" || theme === "dark" ? theme : undefined,
-    notes: params.has("notes") ? isTruthyFlag(params.get("notes")) : true,
+    audiences: parseAudiences(params),
   };
+}
+
+/**
+ * `audiences=viewer,author` / `all` / `none`. Unrecognized values fall back to the default rather
+ * than blanking the captions. The older boolean `notes` flag still turns them all off.
+ */
+function parseAudiences(params: URLSearchParams): DecisionAudience[] {
+  const raw = params.get("audiences");
+  if (raw !== null) {
+    const tokens = raw
+      .toLowerCase()
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (tokens.includes("none")) return [];
+    if (tokens.includes("all")) return [...ALL_AUDIENCES];
+    const picked = ALL_AUDIENCES.filter((a) => tokens.includes(a));
+    if (picked.length) return picked;
+  }
+  if (params.has("notes") && !isTruthyFlag(params.get("notes"))) return [];
+  return ["viewer"];
 }
 
 const isTruthyFlag = (v: string | null) => v === null || v === "" || v === "true" || v === "1";

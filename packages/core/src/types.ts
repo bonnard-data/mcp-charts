@@ -35,6 +35,48 @@ export interface Encode {
   size?: string;
 }
 
+// --- Decisions: what resolve() did to the data, and who needs to know. ---
+
+/**
+ * Who a decision is for.
+ *
+ * `viewer` — a human looking at the rendered chart; presentational captions.
+ * `author` — whoever builds or edits the view (human or agent); their own config mistakes.
+ * `agent`  — an AI agent that called the tool; whether the returned data is safe to compute on.
+ */
+export type DecisionAudience = "viewer" | "author" | "agent";
+
+/** The situations resolve() (and its consumers) report. Open: a consumer may add its own. */
+export type DecisionKind =
+  | "encode_unknown_column"
+  | "loose_dates"
+  | "dedupe_sum"
+  | "rate_sum_hazard"
+  | "y2_dropped_on_pivot"
+  | "series_fold"
+  | "no_measure"
+  | "forced_type_mismatch"
+  | "bar_cap"
+  | "downsample"
+  | "scatter_sample"
+  | "pie_fold"
+  | "pie_negative_magnitudes"
+  | "waterfall_totals_guess"
+  | "coerced_numeric_strings"
+  | "driver_wrapped_values"
+  | "result_truncated"
+  | "item_error"
+  | "consumer_note";
+
+/** One thing that happened while resolving, addressed to the audiences it matters to. */
+export interface Decision {
+  kind: DecisionKind | (string & {});
+  audiences: DecisionAudience[];
+  message: string;
+  /** The values behind the message (counts, dropped column names), for a machine to branch on. */
+  data?: Record<string, string | number | boolean | string[]>;
+}
+
 /** The normalized result every data callback returns. */
 export interface ChartData {
   rows: Record<string, unknown>[];
@@ -43,6 +85,8 @@ export interface ChartData {
   /** Data-source advisories (e.g. "result truncated at the row cap") that resolve() merges
    *  into ChartSpec.notes so they surface on the chart. */
   notes?: string[];
+  /** Structured form of the above. Anything only in `notes` is carried as a `consumer_note`. */
+  decisions?: Decision[];
 }
 
 /** Context passed to data callbacks — extensible bag so the signature never breaks. */
@@ -122,8 +166,11 @@ export interface ChartSpec {
   pointLabel?: string;
   /** Waterfall only: step labels that are totals (full bars anchored at 0), not floating deltas. */
   totals?: string[];
-  /** Non-fatal advisories about how the data was massaged (e.g. summed unaggregated rows). */
+  /** Every decision's message, in order. A back-compatible projection of `decisions`; new code
+   *  should read `decisions` and filter by audience. */
   notes?: string[];
+  /** What resolve() did to the data, each addressed to the audiences it matters to. */
+  decisions?: Decision[];
 }
 
 /** Options to resolve(), typically sourced from the agent's tool args. */
@@ -152,7 +199,9 @@ export interface ChartExplanation {
   chartType: ChartType;
   x: string;
   series: string[];
+  /** Projection of `decisions`, kept for back-compatibility. */
   notes: string[];
+  decisions: Decision[];
 }
 
 // --- DashboardSpec: a grid of items (charts, KPIs, text). A separate render-ready contract
@@ -175,6 +224,8 @@ export interface KpiTile {
   /** e.g. "vs last month". */
   caption?: string;
   span?: number;
+  /** This tile failed to produce a value. Rendered as a failure, not an advisory. */
+  error?: string;
 }
 
 /** A block of markdown text. The renderer parses it with raw HTML disabled; `heading` is escaped. */
@@ -194,6 +245,8 @@ export interface ChartCell {
   id?: string;
   spec: ChartSpec;
   span?: number;
+  /** This cell failed to build. Rendered as a failure, not an advisory. */
+  error?: string;
 }
 
 export type DashboardItem = ChartCell | KpiTile | TextBlock;
@@ -204,6 +257,8 @@ export interface DashboardSpec {
   /** default 2; renderer clamps 1..4; item spans clamp to columns. */
   columns?: number;
   items: DashboardItem[];
-  /** non-fatal advisories, same posture as ChartSpec.notes. */
+  /** Projection of `decisions`, kept for back-compatibility. Same posture as ChartSpec.notes. */
   notes?: string[];
+  /** Dashboard-level decisions, each addressed to the audiences it matters to. */
+  decisions?: Decision[];
 }

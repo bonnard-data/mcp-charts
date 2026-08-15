@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ChartContext, ChartData, ChartSpec, ChartType, Encode, ResolveOptions } from "./types.js";
 import { resolve } from "./resolve/resolve.js";
-import { validateRowsShape, assertPlottedScalar, warnUntypedColumns } from "./validate.js";
+import { validateRowsShape, assertPlottedScalar, warnUntypedColumns, mergeAdvisories } from "./validate.js";
 import { WIDGET_HTML } from "./generated/widget-html.js";
 
 const ALL_CHART_TYPES: ChartType[] = ["line", "bar", "area", "pie", "scatter", "funnel", "waterfall", "table"];
@@ -206,6 +206,9 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
         pointLabel: z.string().optional(),
         totals: z.array(z.string()).optional(),
         notes: z.array(z.string()).optional(),
+        // Undeclared fields are stripped from structuredContent by the MCP SDK, so decisions must
+        // be named here to survive the trip to the host.
+        decisions: z.array(z.record(z.string(), z.unknown())).optional(),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
       // Link the tool to its widget. `ui.resourceUri` is the MCP Apps standard (Claude,
@@ -220,7 +223,8 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
       try {
         const data = await runSql(String(args.sql), ctx);
         validateRowsShape(data.rows); // fail loud on a wrong shape (not array / not objects)
-        // Nudge the integrator (once) if a column arrived untyped and looks mis-inferrable.
+        // Nudge the integrator (once) if a column arrived untyped and looks mis-inferrable. The
+        // same advisories ride the spec below, so they reach the author, not just the server log.
         for (const w of warnUntypedColumns(data)) {
           if (warnedIntegration.has(w)) continue;
           warnedIntegration.add(w);
@@ -229,14 +233,17 @@ export function addCharts(server: McpServer, options: AddChartsOptions): void {
         const title = args.title as string | undefined;
         if (data.rows.length === 0) return emptyResult(title); // friendly "no rows" state
         if (args.encode) data.encode = { ...(data.encode ?? {}), ...(args.encode as Encode) };
-        const spec = resolve(data, {
-          chartType: args.chartType as ChartType | undefined,
-          title,
-          stacking: args.stacking as ChartSpec["stacking"],
-          horizontal: args.horizontal as boolean | undefined,
-          reference: args.reference as { target?: number; average?: boolean } | undefined,
-          xAxisType: args.xAxisType as ResolveOptions["xAxisType"],
-        });
+        const spec = mergeAdvisories(
+          resolve(data, {
+            chartType: args.chartType as ChartType | undefined,
+            title,
+            stacking: args.stacking as ChartSpec["stacking"],
+            horizontal: args.horizontal as boolean | undefined,
+            reference: args.reference as { target?: number; average?: boolean } | undefined,
+            xAxisType: args.xAxisType as ResolveOptions["xAxisType"],
+          }),
+          data,
+        );
         assertPlottedScalar(spec); // every plotted column must be scalar
         return buildResult(spec);
       } catch (err) {
