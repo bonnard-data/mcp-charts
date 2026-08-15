@@ -1,5 +1,12 @@
 # @bonnard/example-quickstart
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [5cb4337]
+  - @bonnard/mcp-charts@0.5.2
+
 ## 0.0.8
 
 ### Patch Changes

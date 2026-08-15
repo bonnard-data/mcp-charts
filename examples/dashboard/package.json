@@ -1,6 +1,6 @@
 {
   "name": "@bonnard/example-dashboard",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "description": "Return a DashboardSpec from an MCP tool: a multi-chart dashboard (KPIs + charts + text) in one widget.",
